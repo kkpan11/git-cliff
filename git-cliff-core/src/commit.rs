@@ -8,8 +8,6 @@ use crate::error::{
 	Error as AppError,
 	Result,
 };
-#[cfg(feature = "github")]
-use crate::github::GitHubContributor;
 #[cfg(feature = "repo")]
 use git2::{
 	Commit as GitCommit,
@@ -126,7 +124,16 @@ pub struct Commit<'a> {
 	pub merge_commit:  bool,
 	/// GitHub metadata of the commit.
 	#[cfg(feature = "github")]
-	pub github:        GitHubContributor,
+	pub github:        crate::remote::RemoteContributor,
+	/// GitLab metadata of the commit.
+	#[cfg(feature = "gitlab")]
+	pub gitlab:        crate::remote::RemoteContributor,
+	/// Gitea metadata of the commit.
+	#[cfg(feature = "gitea")]
+	pub gitea:         crate::remote::RemoteContributor,
+	/// Bitbucket metadata of the commit.
+	#[cfg(feature = "bitbucket")]
+	pub bitbucket:     crate::remote::RemoteContributor,
 }
 
 impl<'a> From<String> for Commit<'a> {
@@ -186,7 +193,9 @@ impl Commit<'_> {
 			commit = commit.preprocess(preprocessors)?;
 		}
 		if config.conventional_commits.unwrap_or(true) {
-			if config.filter_unconventional.unwrap_or(true) {
+			if config.filter_unconventional.unwrap_or(true) &&
+				!config.split_commits.unwrap_or(false)
+			{
 				commit = commit.into_conventional()?;
 			} else if let Ok(conv_commit) = commit.clone().into_conventional() {
 				commit = conv_commit;
@@ -260,11 +269,20 @@ impl Commit<'_> {
 			if let Some(message_regex) = parser.message.as_ref() {
 				regex_checks.push((message_regex, self.message.to_string()))
 			}
-			if let (Some(body_regex), Some(body)) = (
-				parser.body.as_ref(),
-				self.conv.as_ref().and_then(|v| v.body()),
+			let body = self
+				.conv
+				.as_ref()
+				.and_then(|v| v.body())
+				.map(|v| v.to_string());
+			if let Some(body_regex) = parser.body.as_ref() {
+				regex_checks.push((body_regex, body.clone().unwrap_or_default()))
+			}
+			if let (Some(footer_regex), Some(footers)) = (
+				parser.footer.as_ref(),
+				self.conv.as_ref().map(|v| v.footers()),
 			) {
-				regex_checks.push((body_regex, body.to_string()))
+				regex_checks
+					.extend(footers.iter().map(|f| (footer_regex, f.to_string())));
 			}
 			if let (Some(field_name), Some(pattern_regex)) =
 				(parser.field.as_ref(), parser.pattern.as_ref())
@@ -274,11 +292,7 @@ impl Commit<'_> {
 					match field_name.as_str() {
 						"id" => Some(self.id.clone()),
 						"message" => Some(self.message.clone()),
-						"body" => self
-							.conv
-							.as_ref()
-							.and_then(|v| v.body())
-							.map(|v| v.to_string()),
+						"body" => body,
 						"author.name" => self.author.name.clone(),
 						"author.email" => self.author.email.clone(),
 						"committer.name" => self.committer.name.clone(),
@@ -309,7 +323,7 @@ impl Commit<'_> {
 				}
 			}
 			for (regex, text) in regex_checks {
-				if regex.is_match(&text) {
+				if regex.is_match(text.trim()) {
 					if self.skip_commit(parser, protect_breaking) {
 						return Err(AppError::GroupError(String::from(
 							"Skipping commit",
@@ -440,6 +454,12 @@ impl Serialize for Commit<'_> {
 		commit.serialize_field("merge_commit", &self.merge_commit)?;
 		#[cfg(feature = "github")]
 		commit.serialize_field("github", &self.github)?;
+		#[cfg(feature = "gitlab")]
+		commit.serialize_field("gitlab", &self.gitlab)?;
+		#[cfg(feature = "gitea")]
+		commit.serialize_field("gitea", &self.gitea)?;
+		#[cfg(feature = "bitbucket")]
+		commit.serialize_field("bitbucket", &self.bitbucket)?;
 		commit.end()
 	}
 }
@@ -470,6 +490,7 @@ mod test {
 				sha:           None,
 				message:       Regex::new("test*").ok(),
 				body:          None,
+				footer:        None,
 				group:         Some(String::from("test_group")),
 				default_scope: Some(String::from("test_scope")),
 				scope:         None,
@@ -643,6 +664,7 @@ mod test {
 				sha:           None,
 				message:       None,
 				body:          None,
+				footer:        None,
 				group:         Some(String::from("Test group")),
 				default_scope: None,
 				scope:         None,
@@ -671,6 +693,7 @@ mod test {
 				)),
 				message:       None,
 				body:          None,
+				footer:        None,
 				group:         None,
 				default_scope: None,
 				scope:         None,
@@ -690,6 +713,7 @@ mod test {
 				)),
 				message:       None,
 				body:          None,
+				footer:        None,
 				group:         Some(String::from("Test group")),
 				default_scope: None,
 				scope:         None,

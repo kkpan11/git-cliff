@@ -48,6 +48,7 @@ use std::io::{
 	self,
 	Write,
 };
+use std::path::PathBuf;
 use std::time::{
 	SystemTime,
 	UNIX_EPOCH,
@@ -89,7 +90,9 @@ fn process_repository<'a>(
 	let ignore_regex = config.git.ignore_tags.as_ref();
 	tags = tags
 		.into_iter()
-		.filter(|(_, name)| {
+		.filter(|(_, tag)| {
+			let name = &tag.name;
+
 			// Keep skip tags to drop commits in the later stage.
 			let skip = skip_regex.map(|r| r.is_match(name)).unwrap_or_default();
 
@@ -119,7 +122,40 @@ fn process_repository<'a>(
 				config.remote.github.repo = remote.repo;
 			}
 			Err(e) => {
-				debug!("Failed to get remote from repository: {:?}", e);
+				debug!("Failed to get remote from GitHub repository: {:?}", e);
+			}
+		}
+	} else if !config.remote.gitlab.is_set() {
+		match repository.upstream_remote() {
+			Ok(remote) => {
+				debug!("No GitLab remote is set, using remote: {}", remote);
+				config.remote.gitlab.owner = remote.owner;
+				config.remote.gitlab.repo = remote.repo;
+			}
+			Err(e) => {
+				debug!("Failed to get remote from GitLab repository: {:?}", e);
+			}
+		}
+	} else if !config.remote.gitea.is_set() {
+		match repository.upstream_remote() {
+			Ok(remote) => {
+				debug!("No Gitea remote is set, using remote: {}", remote);
+				config.remote.gitea.owner = remote.owner;
+				config.remote.gitea.repo = remote.repo;
+			}
+			Err(e) => {
+				debug!("Failed to get remote from Gitea repository: {:?}", e);
+			}
+		}
+	} else if !config.remote.bitbucket.is_set() {
+		match repository.upstream_remote() {
+			Ok(remote) => {
+				debug!("No Bitbucket remote is set, using remote: {}", remote);
+				config.remote.bitbucket.owner = remote.owner;
+				config.remote.bitbucket.repo = remote.repo;
+			}
+			Err(e) => {
+				debug!("Failed to get remote from Bitbucket repository: {:?}", e);
 			}
 		}
 	}
@@ -150,7 +186,7 @@ fn process_repository<'a>(
 					repository.current_tag().as_ref().and_then(|tag| {
 						tags.iter()
 							.enumerate()
-							.find(|(_, (_, v))| v == &tag)
+							.find(|(_, (_, v))| v.name == tag.name)
 							.map(|(i, _)| i)
 					}) {
 					match current_tag_index.checked_sub(1) {
@@ -192,10 +228,10 @@ fn process_repository<'a>(
 		if let Some(commit_id) = commits.first().map(|c| c.id().to_string()) {
 			match tags.get(&commit_id) {
 				Some(tag) => {
-					warn!("There is already a tag ({}) for {}", tag, commit_id)
+					warn!("There is already a tag ({:?}) for {}", tag, commit_id)
 				}
 				None => {
-					tags.insert(commit_id, tag.to_string());
+					tags.insert(commit_id, repository.resolve_tag(tag));
 				}
 			}
 		}
@@ -209,15 +245,21 @@ fn process_repository<'a>(
 	for git_commit in commits.iter().rev() {
 		let commit = Commit::from(git_commit);
 		let commit_id = commit.id.to_string();
+		releases[release_index].repository =
+			Some(repository.path.to_string_lossy().to_string());
 		if args.sort == Sort::Newest {
 			releases[release_index].commits.insert(0, commit);
 		} else {
 			releases[release_index].commits.push(commit);
 		}
 		if let Some(tag) = tags.get(&commit_id) {
-			releases[release_index].version = Some(tag.to_string());
+			let tag_name = &tag.name;
+
+			releases[release_index].version = Some(tag_name.clone());
+			releases[release_index].message = tag.message.clone();
 			releases[release_index].commit_id = Some(commit_id);
-			releases[release_index].timestamp = if args.tag.as_deref() == Some(tag) {
+			releases[release_index].timestamp = if args.tag == Some(tag_name.clone())
+			{
 				SystemTime::now()
 					.duration_since(UNIX_EPOCH)?
 					.as_secs()
@@ -252,6 +294,13 @@ fn process_repository<'a>(
 		}
 	}
 
+	// Set custom message for the latest release.
+	if let Some(message) = &args.with_tag_message {
+		if let Some(latest_release) = releases.iter_mut().last() {
+			latest_release.message = Some(message.to_owned());
+		}
+	}
+
 	// Set the previous release if the first release does not have one set.
 	if !releases.is_empty() &&
 		releases
@@ -265,7 +314,7 @@ fn process_repository<'a>(
 			.map(|tag| {
 				tags.iter()
 					.enumerate()
-					.find(|(_, (_, v))| v == &tag)
+					.find(|(_, (_, v))| v.name == tag.name)
 					.and_then(|(i, _)| i.checked_sub(1))
 					.and_then(|i| tags.get_index(i))
 			})
@@ -273,10 +322,10 @@ fn process_repository<'a>(
 			.flatten();
 
 		// Set the previous release if the first tag is found.
-		if let Some((commit_id, version)) = first_tag {
+		if let Some((commit_id, tag)) = first_tag {
 			let previous_release = Release {
 				commit_id: Some(commit_id.to_string()),
-				version: Some(version.to_string()),
+				version: Some(tag.name.clone()),
 				timestamp: repository
 					.find_commit(commit_id.to_string())
 					.map(|v| v.time().seconds())
@@ -385,6 +434,15 @@ pub fn run(mut args: Opt) -> Result<()> {
 			)));
 		}
 	}
+	if args.output.is_some() &&
+		args.prepend.is_some() &&
+		args.output.as_ref() == args.prepend.as_ref()
+	{
+		return Err(Error::ArgumentError(String::from(
+			"'-o' and '-p' can only be used together if they point to different \
+			 files",
+		)));
+	}
 	if args.body.is_some() {
 		config.changelog.body.clone_from(&args.body);
 	}
@@ -402,9 +460,30 @@ pub fn run(mut args: Opt) -> Result<()> {
 	if args.github_token.is_some() {
 		config.remote.github.token.clone_from(&args.github_token);
 	}
+	if args.gitlab_token.is_some() {
+		config.remote.gitlab.token.clone_from(&args.gitlab_token);
+	}
+	if args.gitea_token.is_some() {
+		config.remote.gitea.token.clone_from(&args.gitea_token);
+	}
+	if args.bitbucket_token.is_some() {
+		config
+			.remote
+			.bitbucket
+			.token
+			.clone_from(&args.bitbucket_token);
+	}
 	if let Some(ref remote) = args.github_repo {
 		config.remote.github.owner = remote.0.owner.to_string();
 		config.remote.github.repo = remote.0.repo.to_string();
+	}
+	if let Some(ref remote) = args.gitlab_repo {
+		config.remote.gitlab.owner = remote.0.owner.to_string();
+		config.remote.gitlab.repo = remote.0.repo.to_string();
+	}
+	if let Some(ref remote) = args.bitbucket_repo {
+		config.remote.bitbucket.owner = remote.0.owner.to_string();
+		config.remote.bitbucket.repo = remote.0.repo.to_string();
 	}
 	if args.no_exec {
 		if let Some(ref mut preprocessors) = config.git.commit_preprocessors {
@@ -422,7 +501,12 @@ pub fn run(mut args: Opt) -> Result<()> {
 	if args.tag_pattern.is_some() {
 		config.git.tag_pattern.clone_from(&args.tag_pattern);
 	}
-
+	if args.tag.is_some() {
+		config.bump.initial_tag.clone_from(&args.tag);
+	}
+	if args.ignore_tags.is_some() {
+		config.git.ignore_tags.clone_from(&args.ignore_tags);
+	}
 	// Process the repositories.
 	let repositories = args.repository.clone().unwrap_or(vec![env::current_dir()?]);
 	let mut releases = Vec::<Release>::new();
@@ -498,7 +582,11 @@ pub fn run(mut args: Opt) -> Result<()> {
 		changelog.prepend(fs::read_to_string(path)?, &mut File::create(path)?)?;
 	}
 	if let Some(path) = args.output {
-		let mut output = File::create(path)?;
+		let mut output: Box<dyn Write> = if path == PathBuf::from("-") {
+			Box::new(io::stdout())
+		} else {
+			Box::new(File::create(path)?)
+		};
 		if args.context {
 			changelog.write_context(&mut output)
 		} else {
