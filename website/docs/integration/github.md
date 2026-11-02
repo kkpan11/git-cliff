@@ -63,6 +63,14 @@ You can use the [`GITHUB_API_URL`](https://docs.github.com/en/actions/learn-gith
 
 :::
 
+:::info
+
+If you are getting invalid peer certificate errors, you can use the `--use-native-tls` flag to load certificates from the platform's native certificate store.
+
+It is also possible to configure this in the configuration file, see the [remote configuration](/docs/configuration/remote#native_tls) for more information.
+
+:::
+
 ## Templating
 
 :::tip
@@ -92,7 +100,7 @@ https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/compare/{{
 
 ### Commit authors
 
-For each commit, GitHub related values are added as a nested object (named `github`) to the [template context](/docs/templating/context):
+For each commit, GitHub related values are added as a nested object (named `remote`) to the [template context](/docs/templating/context):
 
 ```json
 {
@@ -104,6 +112,7 @@ For each commit, GitHub related values are added as a nested object (named `gith
 
   "remote": {
     "username": "orhun",
+    "pr_author": "orhun",
     "pr_title": "some things have changed",
     "pr_number": 420,
     "pr_labels": ["rust"],
@@ -117,7 +126,7 @@ This can be used in the template as follows:
 ```
 {% for commit in commits %}
   * {{ commit.message | split(pat="\n") | first | trim }}\
-    {% if commit.remote.username %} by @{{ commit.remote.username }}{%- endif %}\
+    {% if commit.remote.username %} by @{{ commit.remote.username | replace(from="[bot]", to="") }}{%- endif %}\
     {% if commit.remote.pr_number %} in #{{ commit.remote.pr_number }}{%- endif %}
 {%- endfor -%}
 ```
@@ -128,6 +137,19 @@ The will result in:
 - feat(commit): add merge_commit flag to the context by @orhun in #389
 - feat(args): set `CHANGELOG.md` as default missing value for output option by @sh-cho in #354
 ```
+
+`username` is resolved from the commit author, whereas `pr_author` is the account that
+opened the pull request. They can differ: a squash-merge can produce a commit that
+carries the contributor's name with the merging user's email, which GitHub resolves to
+the merging user's account. A template that wants to credit the contributor can prefer
+`pr_author`:
+
+```jinja2
+{% if commit.remote.pr_author or commit.remote.username %} by @{{ commit.remote.pr_author | default(value=commit.remote.username) | replace(from="[bot]", to="") }}{% endif %}
+```
+
+The guard matters: `commit.remote` is absent for any commit the remote API did not return, and an
+unguarded lookup on it aborts the whole render.
 
 ### Contributors
 
@@ -165,7 +187,7 @@ This can be used in the template as follows:
 
 ```
 {% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
-  * @{{ contributor.username }} made their first contribution in #{{ contributor.pr_number }}
+  * @{{ contributor.username | replace(from="[bot]", to="") }} made their first contribution in #{{ contributor.pr_number }}
 {%- endfor -%}
 ```
 

@@ -59,6 +59,14 @@ You can use the `BITBUCKET_API_URL` environment variable want to override the AP
 
 :::
 
+:::tip
+
+If you are using a certificate that is not included in the default trust store, you can use the `--use-native-tls` flag to load certificates from the platform's native certificate store.
+
+It is also possible to configure this in the configuration file, see the [remote configuration](/docs/configuration/remote#native_tls) for more information.
+
+:::
+
 ## Templating
 
 :::tip
@@ -88,7 +96,7 @@ https://bitbucket.org/{{ remote.bitbucket.owner }}/{{ remote.bitbucket.repo }}/c
 
 ### Commit authors
 
-For each commit, Bitbucket related values are added as a nested object (named `bitbucket`) to the [template context](/docs/templating/context):
+For each commit, Bitbucket related values are added as a nested object (named `remote`) to the [template context](/docs/templating/context):
 
 ```json
 {
@@ -100,6 +108,7 @@ For each commit, Bitbucket related values are added as a nested object (named `b
 
   "remote": {
     "username": "orhun",
+    "pr_author": "orhun",
     "pr_title": "some things have changed",
     "pr_number": 420,
     "pr_labels": ["rust"],
@@ -124,6 +133,18 @@ The will result in:
 - feat(commit): add merge_commit flag to the context by @orhun in #389
 - feat(args): set `CHANGELOG.md` as default missing value for output option by @sh-cho in #354
 ```
+
+`username` is resolved from the commit author, whereas `pr_author` is the account that
+opened the pull request. On Bitbucket the two are different kinds of value: `pr_author` is the
+account's `nickname`, while `username` is the raw `Name <email>` string from the commit. Falling
+back therefore yields `@Name <email>` rather than a handle, so prefer `pr_author` on its own:
+
+```jinja2
+{% if commit.remote.pr_author %} by @{{ commit.remote.pr_author }}{% endif %}
+```
+
+The guard matters: `commit.remote` is absent for any commit the remote API did not return, and an
+unguarded lookup on it aborts the whole render.
 
 ### Contributors
 

@@ -31,6 +31,45 @@ Then strip the tags in the template with the series of filters:
 ### {{ group | striptags | trim | upper_first }}
 ```
 
+:::info
+
+If you are using the built-in [`commit_groups`](/docs/templating/syntax#custom-built-in-filters) filter, you can also pass the `commit_parsers_groups` context field to keep the parser order without embedding ordering tags:
+
+```jinja2
+{% for entry in commits | commit_groups(groups=commit_parsers_groups) %}
+  ### {{ entry.group | trim | upper_first }}
+{% endfor %}
+```
+
+For example, given these [`commit_parsers`](/docs/configuration/git#commit_parsers) and the custom [`commit_groups`](/docs/templating/syntax#custom-built-in-filters) filter:
+
+```toml
+[git]
+commit_parsers = [
+  { message = "^feat", group = "New features" },
+  { message = "^fix", group = "Bug fixes" },
+  { message = "^perf", group = "Performance" },
+]
+```
+
+The template above renders:
+
+```md
+### New features
+
+- feat: add parser-order docs
+
+### Bug fixes
+
+- fix: keep group order stable
+
+### Performance
+
+- perf: speed up changelog rendering
+```
+
+:::
+
 ## Discard duplicate commits
 
 ```jinja2
@@ -101,4 +140,35 @@ To support unicode characters, use `xelatex` as PDF engine and a font family whi
 
 ```bash
 pandoc --from=gfm --to=pdf --pdf-engine=xelatex -o CHANGELOG.pdf CHANGELOG.md --variable mainfont="Segoe UI Emoji"
+```
+
+## Handling remote Git service API rate limits
+
+When retrieving information from a remote Git repository, you may encounter HTTP 403 errors due to rate limiting.
+
+As a simple workaround, you can run `git-cliff` in offline mode to skip remote API calls:
+
+```bash
+git-cliff --offline
+# or via environment variable
+GIT_CLIFF_OFFLINE=true git-cliff
+```
+
+:::note
+
+This will generate the changelog using only local Git commit information.
+Note that PR titles, labels, and other remote metadata will not be included in offline mode.
+
+:::
+
+## Parsing commits with multiple parsers
+
+Use `continue = true` to apply more than one [`commit_parser`](/docs/configuration/git#commit_parsers) to a commit:
+
+```toml
+[git]
+commit_parsers = [
+  { footer = "^Component:Billing$", scope = "billing", continue = true },
+  { message = "^feat", group = "Features" },
+]
 ```

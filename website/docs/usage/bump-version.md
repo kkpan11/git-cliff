@@ -22,6 +22,18 @@ How it works is that for a semantic versioning such as `<MAJOR>.<MINOR>.<PATCH>`
 - "feat:" -> increments `MINOR`
 - "scope!" (breaking changes) -> increments `MAJOR`
 
+:::note
+
+For unconventional commits, only the subject line (the first line) is used while calculating the next version.
+
+:::
+
+:::note
+
+The next version is checked against the regex value set by [tag_pattern](/docs/configuration/git#tag_pattern).
+
+:::
+
 ## Get version
 
 You can also calculate and print the next semantic version to `stdout`:

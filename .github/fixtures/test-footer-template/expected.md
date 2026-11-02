@@ -1,33 +1,29 @@
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
 ## [unreleased]
 
-### Perf
+### <!-- 4 -->⚡ Performance
 
 - Footer
 
-### Test
+### <!-- 6 -->🧪 Testing
 
 - Footer
 
 ## [3.0.0]
 
-### Feat
+### <!-- 0 -->🚀 Features
 
 - Add footer
 
 ## [0.2.0]
 
-### Fix
+### <!-- 1 -->🐛 Bug Fixes
 
 - Fix feature 1
 - Fix feature 2
 
 ## [0.1.0]
 
-### Feat
+### <!-- 0 -->🚀 Features
 
 - Add feature 1
 - Add feature 2

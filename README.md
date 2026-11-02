@@ -31,19 +31,24 @@
 
 ## Documentation
 
-Learn how to use **git-cliff** from the [documentation](https://git-cliff.org/docs).
+Learn how to use **git-cliff** from the [official documentation](https://git-cliff.org/docs).
 
 - [Installation](https://git-cliff.org/docs/installation/)
 - [Usage](https://git-cliff.org/docs/usage/examples)
 - [Configuration](https://git-cliff.org/docs/configuration)
 - [Templating](https://git-cliff.org/docs/category/templating)
 
+You can also check out the blog posts written by the community:
+
+- [An introduction to git-cliff for release management](https://substack.evancarroll.com/p/git-cliff-for-automated-release-management): Learn how to automate your software releases
+- [Git-cliff and monorepos](https://substack.evancarroll.com/p/git-cliff-and-monorepos): An introduction to the monorepo capabilities of git-cliff
+- [git-cliff: The Smart Way to Handle Changelogs](https://medium.com/@toniomasotti/git-cliff-96449950db48)
+
 ## In The Media
 
 - [Turning Git commits into changelog with git-cliff](https://www.youtube.com/watch?v=RWh8qbiLRts) - RustLab 2023 (Talk)
 - [An Interview with Orhun of git-cliff](https://console.substack.com/p/console-141) - Console #141 (Newsletter)
 - [KaiCode Open Source Festival 2024](https://www.kaicode.org/2024.html) (Second place winner)
-- [git-cliff: The Smart Way to Handle Changelogs](https://medium.com/@toniomasotti/git-cliff-96449950db48) (Blog post)
 
 ## Editor Support
 
@@ -82,7 +87,7 @@ Made with [contrib.rocks](https://contrib.rocks).
 <a href="https://discord.gg/W3mAwMDWH4">
     <img src="https://img.shields.io/discord/1093977388892819553?style=flat&labelColor=1C2C2E&color=BEC5C9&logo=discord&logoColor=BEC5C9&label=join%20discord"></a>
 <a href="https://twitter.com/git_cliff">
-    <img src="https://img.shields.io/twitter/follow/git_cliff?style=flat&labelColor=1C2C2E&color=BEC5C9&logo=twitter&logoColor=BEC5C9"></a>
+    <img src="https://img.shields.io/badge/follow-@git__cliff-BEC5C9?style=flat&logo=x&logoColor=BEC5C9&labelColor=1C2C2E"></a>
 <a href="https://fosstodon.org/@git_cliff">
     <img src="https://img.shields.io/mastodon/follow/111545487385097711?domain=https%3A%2F%2Ffosstodon.org&style=flat&labelColor=1C2C2E&color=BEC5C9&logo=mastodon&logoColor=BEC5C9"></a>
 
@@ -92,4 +97,4 @@ Licensed under either of [Apache License Version 2.0](./LICENSE-APACHE) or [The 
 
 ## Copyright
 
-Copyright © 2021-2024, [git-cliff contributors](mailto:git-cliff@protonmail.com)
+Copyright © 2021-2025, [git-cliff contributors](mailto:git-cliff@protonmail.com)

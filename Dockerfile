@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4.3-labs
-FROM lukemathwalker/cargo-chef:0.1.68-rust-1.82.0-slim AS chef
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1.98.0-slim-bookworm@sha256:114101b5c218940bc2381db703dd3529473db554992bf10fc94a7ba2ac35baf8 AS chef
 WORKDIR app
 
 FROM chef AS planner
@@ -11,10 +11,15 @@ COPY --from=planner /app/recipe.json recipe.json
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-RUN cargo build --release --locked --no-default-features --features github --features gitlab --features bitbucket
+RUN cargo build --release --locked --no-default-features --features github --features gitlab --features bitbucket --features azure_devops
 RUN rm -f target/release/deps/git_cliff*
 
-FROM debian:bookworm-slim as runner
+FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 as runner
+
+# Install ca-certificates (required for `--use-native-tls` argument)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Everything inside this container will be explicitly mounted by the end user,
 # so we can sidestep some Git security restrictions. This app recommends

@@ -6,6 +6,7 @@ This section contains the parsing and git related configuration options.
 [git]
 conventional_commits = true
 filter_unconventional = true
+require_conventional = false
 split_commits = false
 commit_parsers = [
     { message = "^feat", group = "Features"},
@@ -18,17 +19,30 @@ commit_parsers = [
 ]
 protect_breaking_commits = false
 filter_commits = false
+fail_on_unmatched_commit = false
 tag_pattern = "v[0-9].*"
 
 skip_tags = "v0.1.0-beta.1"
 ignore_tags = ""
 topo_order = false
+topo_order_commits = true
 sort_commits = "oldest"
 link_parsers = [
     { pattern = "#(\\d+)", href = "https://github.com/orhun/git-cliff/issues/$1"},
     { pattern = "RFC(\\d+)", text = "ietf-rfc$1", href = "https://datatracker.ietf.org/doc/html/rfc$1"},
 ]
+processing_order = [
+    "commit_preprocessors",
+    "split_commits",
+    "conventional_commits",
+    "commit_parsers",
+    "link_parsers",
+]
 limit_commits = 42
+limit_tags = 3
+recurse_submodules = false
+include_paths = ["src/", "doc/**/*.md"]
+exclude_paths = ["unrelated/"]
 ```
 
 ### conventional_commits
@@ -78,6 +92,23 @@ conventional_commits = false
 filter_unconventional = false
 ```
 
+### require_conventional
+
+If set to `true`, all commits included in the changelog must be conventional. If any unconventional commits are found, an error will be logged and changelog generation fails.
+
+```toml
+conventional_commits = true
+require_conventional = false
+commit_parsers = [
+  { message = ".*", group = "Other", default_scope = "other"},
+  { message = "^Merging", skip = true }
+]
+```
+
+If set to `true`, this option takes precedence over `filter_unconventional`.
+
+Checking takes place after `commit_parsers`. Thus commits can be skipped by matching parsers.
+
 ### split_commits
 
 > This flag violates "conventional commits". It should remain off by default if conventional commits is to be respected.
@@ -99,11 +130,96 @@ With the configuration above, lines are parsed as conventional commits and uncon
 If `filter_unconventional = false`, every line will be processed as an unconventional commit, resulting in each line of
 a commit being treated as a changelog entry.
 
+:::note
+
+Without [`processing_order`](#processing_order), **git-cliff** applies parsers to the full message before splitting it. A skipped or unmatched commit is discarded before its body lines are checked.
+
+<details>
+  <summary>To filter each line separately:</summary>
+
+To filter each line separately, put `split_commits` before `commit_parsers`:
+
+```toml
+[git]
+conventional_commits = false
+filter_unconventional = false
+split_commits = true
+filter_commits = true
+commit_parsers = [
+    { message = "^fix:", group = "Fixed" },
+]
+processing_order = [
+    "commit_preprocessors",
+    "split_commits",
+    "conventional_commits",
+    "commit_parsers",
+    "link_parsers",
+]
+```
+
+Given this message, the configuration keeps only the two `fix:` lines in the `Fixed` group:
+
+```text
+Unconventional commit
+
+fix: first line of the commit body
+bugfix: not a matching line
+fix: second line of the commit body
+```
+
+The resulting changelog excerpt is:
+
+```markdown
+## [unreleased]
+
+### Fixed
+
+- Fix: first line of the commit body
+- Fix: second line of the commit body
+```
+
+</details>
+
+:::
+
+### processing_order
+
+Defines a custom commit processing pipeline.
+
+If this field is omitted, **git-cliff** uses the legacy processing flow for backwards compatibility.
+
+Supported step names:
+
+- [`commit_preprocessors`](#commit_preprocessors)
+- [`split_commits`](#split_commits)
+- [`conventional_commits`](#conventional_commits)
+- [`commit_parsers`](#commit_parsers)
+- [`link_parsers`](#link_parsers)
+
+The default processing order (split-before-parsing pipeline) is:
+
+```toml
+[git]
+processing_order = [
+    "commit_preprocessors",
+    "split_commits",
+    "conventional_commits",
+    "commit_parsers",
+    "link_parsers",
+]
+```
+
+:::info
+
+This is useful when you want e.g. [`split_commits`](#split_commits) to happen before parser-based filtering, so each split line is parsed independently.
+
+:::
+
 ### commit_preprocessors
 
 An array of commit preprocessors for manipulating the commit messages before parsing/grouping them. These regex-based preprocessors can be used for removing or selecting certain parts of the commit message/body to be used in the following processes.
 
-:::note 
+:::note
 The `replace` or `replace_command` will take into account of the entire log of commit messages where the specified `pattern` is matched.
 :::
 
@@ -170,18 +286,29 @@ Examples:
   - Skip a specific commit by using its SHA1.
 - `{ sha = "f6f2472bdf0bbb5f9fcaf2d72c1fa9f98f772bb2", group = "Stuff" }`
   - Set the group of the commit by using its SHA1.
+- `{ sha = "f6f2472", group = "Stuff" }`
+  - SHAs can be abbreviated (at least 4 characters). An abbreviated SHA that matches more than one commit is an error.
 - `{ field = "author.name", pattern = "John Doe", group = "John's stuff" }`
   - If the author's name attribute of the commit matches the pattern "John Doe" (as a regex), override the scope with "John's stuff".
-  - All values that are part of the commit context can be used. Nested fields can be accessed via the [dot notation](https://keats.github.io/tera/docs/#dot-notation). Some commonly used ones are:
+  - All values that are part of the commit context can be used. Nested fields can be accessed via the [dot notation](https://keats.github.io/tera/#dot-notation). Some commonly used ones are:
     - `id`
     - `message`
     - `author.name`
     - `author.email`
     - `committer.email`
     - `committer.name`
-  - `body` is a special field which contains the body of a convetional commit, if applicable.
+  - `body` is a special field which contains the body of a conventional commit, if applicable.
   - Be aware that all fields are converted to JSON strings before they are parsed by the given regex, especially when dealing with arrays.
 
+Set `continue = true` to apply following parsers to the same commit:
+
+```toml
+[git]
+commit_parsers = [
+  { footer = "^Component:Billing$", scope = "billing", continue = true },
+  { message = "^feat", group = "Features" },
+]
+```
 
 ### protect_breaking_commits
 
@@ -192,6 +319,18 @@ due to any commit parser.
 
 If set to `true`, commits that are not matched by [`commit_parsers`](#commit_parsers) are filtered out.
 
+### fail_on_unmatched_commit
+
+If set to `true`, **git-cliff** will fail (return a non-zero exit code) when any commit included in the changelog is not matched by any of the configured `commit_parsers`.
+
+This option is useful to enforce that all commits are classified and prevents silently omitting unknown commit types from release notes.
+
+:::note
+
+Commits that are explicitly skipped by a parser (for example `{ message = "^revert", skip = true }`) are not considered unmatched.
+
+:::
+
 ### tag_pattern
 
 A regular expression for matching the git tags.
@@ -201,6 +340,8 @@ This value can be also overridden with using the `--tag-pattern` argument.
 ### skip_tags
 
 A regex for skip processing the matched tags.
+
+This value can be also overridden with using the `--skip-tags` argument.
 
 ### ignore_tags
 
@@ -229,11 +370,31 @@ A regex for _counting in_ the matched tags in the final result.
 
 This value can be also overridden with using the `--count-tags` argument.
 
+### limit_tags
+
+`limit_tags` is an **optional** integer number that limits the number of tags used for generating the changelog.
+
+When no explicit commit range or `--latest`, `--current`, or `--unreleased` flag is provided, git-cliff uses the latest matched tags as a range window.
+
+Setting this value to `0` is equivalent to not setting a limit.
+
+This value can be also overridden with using the `--limit-tags` argument.
+
 ### topo_order
 
 If set to `true`, tags are processed in topological order instead of chronological.
 
 This can also be achieved by using the `--topo-order` command line flag.
+
+### topo_order_commits
+
+If set to `true`, commits are processed in topological order instead of chronological.
+
+```toml
+# if false, sorting commit is equivalent to git log
+# if true (default), sorting commit is equivalent to git log --topo-order
+topo_order_commits = false
+```
 
 ### sort_commits
 
@@ -246,6 +407,8 @@ Possible values:
 
 This can also be achieved by specifying the `--sort` command line argument.
 
+The default value is `oldest`.
+
 ### link_parsers
 
 An array of link parsers for extracting external references, and turning them into URLs, using regex.
@@ -257,10 +420,31 @@ Examples:
 - `{ pattern = "RFC(\\d+)", text = "ietf-rfc$1", href = "https://datatracker.ietf.org/doc/html/rfc$1"}`,
   - Extract mentions of IETF RFCs and generate URLs linking to them. It also rewrites the text as "ietf-rfc...".
 
-These extracted links can be used in the [template](/docs/templating/context) with `commits.links` variable.
+These extracted links can be used in the [template](/docs/templating/context) with `commit.links` variable.
 
 ### limit_commits
 
 `limit_commits` is an **optional** positive integer number that limits the number of included commits in the generated changelog.
 
 `limit_commits` is not part of the default configuration.
+
+### recurse_submodules
+
+`recurse_submodules` is an _optional_ boolean value that indicates whether **git-cliff** should read and process commits of submodules.
+
+This only considers submodules at the toplevel (depth 1). These commits can then be accessed by the variable `submodule_commits` during [templating](/docs/templating/context).
+
+### include_paths
+
+`include_paths` is an _optional_ array of glob patterns. Only commits that modify files matching these patterns will be included in the generated changelog.
+
+When this value is set, the current working directory will **not** be included.
+
+### exclude_paths
+
+`exclude_paths` is an _optional_ array of glob patterns. Commits that **only** modify files matching these patterns will be excluded from the changelog.
+
+This setting takes priority over `include_paths`.
+
+- If a commit touches both included and excluded paths, it **will be included**.
+- If a commit **only** modifies files that match both `include_paths` and `exclude_paths`, it **will be excluded**.

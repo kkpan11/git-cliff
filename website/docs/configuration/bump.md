@@ -38,7 +38,7 @@ When set, the version will be set to this value if no tags are found.
 
 Configures additional commit types that should increment the major or minor accordingly.
 
-They should be used rarely, only in the case you have a spacial case for incrementing versions.
+They should be used rarely, only in the case you have a special case for incrementing versions.
 
 Expects a valid regex pattern.
 
@@ -80,6 +80,37 @@ will result in:
 git-cliff --bumped-version
 
 0.2.0
+```
+
+### no_increment_regex
+
+Configures commit types that should not increment the version.
+
+This is useful when you want conventional commit types such as `chore`, `ci`
+or `docs` to be ignored for version bumping.
+
+Expects a valid regex pattern.
+
+For example:
+
+```toml
+[bump]
+no_increment_regex = "chore|ci|docs"
+```
+
+with this history:
+
+```
+5189568 (HEAD -> main) chore: update CI
+0b17b48 (tag: 0.1.0) initial commit
+```
+
+will result in:
+
+```bash
+git-cliff --bumped-version
+
+0.1.0
 ```
 
 ### bump_type

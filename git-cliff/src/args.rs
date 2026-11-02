@@ -1,55 +1,36 @@
-use clap::{
-	builder::{
-		styling::{
-			Ansi256Color,
-			AnsiColor,
-		},
-		Styles,
-		TypedValueParser,
-		ValueParserFactory,
-	},
-	error::{
-		ContextKind,
-		ContextValue,
-		ErrorKind,
-	},
-	ArgAction,
-	Parser,
-	ValueEnum,
-};
-use git_cliff_core::{
-	config::BumpType,
-	config::Remote,
-	DEFAULT_CONFIG,
-	DEFAULT_OUTPUT,
-};
+use std::path::PathBuf;
+
+use clap::builder::styling::{Ansi256Color, AnsiColor};
+use clap::builder::{Styles, TypedValueParser, ValueParserFactory};
+use clap::error::{ContextKind, ContextValue, ErrorKind};
+use clap::{ArgAction, Parser, ValueEnum};
+use git_cliff_core::DEFAULT_OUTPUT;
+use git_cliff_core::config::{BumpType, Remote};
 use glob::Pattern;
 use regex::Regex;
 use secrecy::SecretString;
-use std::path::PathBuf;
 use url::Url;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum Strip {
-	Header,
-	Footer,
-	All,
+    Header,
+    Footer,
+    All,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Sort {
-	Oldest,
-	Newest,
+    Oldest,
+    Newest,
 }
 
 const STYLES: Styles = Styles::styled()
-	.header(Ansi256Color(208).on_default().bold())
-	.usage(Ansi256Color(208).on_default().bold())
-	.literal(AnsiColor::White.on_default())
-	.placeholder(AnsiColor::Green.on_default());
+    .header(Ansi256Color(208).on_default().bold())
+    .usage(Ansi256Color(208).on_default().bold())
+    .placeholder(AnsiColor::Green.on_default());
 
 /// Command-line arguments to parse.
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 #[command(
     version,
     author = clap::crate_authors!("\n"),
@@ -69,8 +50,9 @@ const STYLES: Styles = Styles::styled()
 	disable_version_flag = true,
     styles(STYLES),
 )]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Opt {
-	#[arg(
+    #[arg(
 		short,
 		long,
 		action = ArgAction::Help,
@@ -78,8 +60,8 @@ pub struct Opt {
 		help = "Prints help information",
 		help_heading = "FLAGS"
 	)]
-	pub help:             Option<bool>,
-	#[arg(
+    pub help: Option<bool>,
+    #[arg(
 		short = 'V',
 		long,
 		action = ArgAction::Version,
@@ -87,40 +69,59 @@ pub struct Opt {
 		help = "Prints version information",
 		help_heading = "FLAGS"
 	)]
-	pub version:          Option<bool>,
-	/// Increases the logging verbosity.
-	#[arg(short, long, action = ArgAction::Count, alias = "debug", help_heading = Some("FLAGS"))]
-	pub verbose:          u8,
-	/// Writes the default configuration file to cliff.toml
-	#[arg(
+    pub version: Option<bool>,
+    /// Increases the logging verbosity.
+    #[arg(short, long, action = ArgAction::Count, alias = "debug", help_heading = Some("FLAGS"))]
+    pub verbose: u8,
+    /// Writes the default configuration file to cliff.toml
+    #[arg(
 	    short,
 	    long,
 	    value_name = "CONFIG",
 	    num_args = 0..=1,
 	    required = false
 	)]
-	pub init:             Option<Option<String>>,
-	/// Sets the configuration file.
-	#[arg(
+    pub init: Option<Option<String>>,
+    /// Sets the directory to look up user-defined templates for `--init`.
+    ///
+    /// A user-defined template overrides a built-in template of the same name.
+    #[arg(
+	    long,
+	    env = "GIT_CLIFF_TEMPLATES_DIR",
+	    value_name = "PATH",
+	    value_parser = Opt::parse_dir
+	)]
+    pub templates_dir: Option<PathBuf>,
+    /// Prints the names of the available templates (built-in and user-defined).
+    #[arg(long, help_heading = Some("FLAGS"))]
+    pub list_templates: bool,
+    /// Sets the configuration file.
+    ///
+    /// When omitted, the configuration is discovered automatically (a project
+    /// `cliff.toml` / `.cliff.toml` / `.config/cliff.toml`, then the user
+    /// configuration directory), falling back to the built-in default.
+    #[arg(
 	    short,
 	    long,
 	    env = "GIT_CLIFF_CONFIG",
 	    value_name = "PATH",
-	    default_value = DEFAULT_CONFIG,
 	    value_parser = Opt::parse_dir
 	)]
-	pub config:           PathBuf,
-	/// Sets the working directory.
-	#[arg(
+    pub config: Option<PathBuf>,
+    /// Sets the URL for the configuration file.
+    #[arg(long, env = "GIT_CLIFF_CONFIG_URL", value_name = "URL", hide = !cfg!(feature = "remote"))]
+    pub config_url: Option<Url>,
+    /// Sets the working directory.
+    #[arg(
 	    short,
 	    long,
 	    env = "GIT_CLIFF_WORKDIR",
 	    value_name = "PATH",
 	    value_parser = Opt::parse_dir
 	)]
-	pub workdir:          Option<PathBuf>,
-	/// Sets the git repository.
-	#[arg(
+    pub workdir: Option<PathBuf>,
+    /// Sets the git repository.
+    #[arg(
 		short,
 		long,
 		env = "GIT_CLIFF_REPOSITORY",
@@ -128,67 +129,79 @@ pub struct Opt {
 		num_args(1..),
 		value_parser = Opt::parse_dir
 	)]
-	pub repository:       Option<Vec<PathBuf>>,
-	/// Sets the path to include related commits.
-	#[arg(
-		long,
-		env = "GIT_CLIFF_INCLUDE_PATH",
-		value_name = "PATTERN",
-		num_args(1..)
-	)]
-	pub include_path:     Option<Vec<Pattern>>,
-	/// Sets the path to exclude related commits.
-	#[arg(
-		long,
-		env = "GIT_CLIFF_EXCLUDE_PATH",
-		value_name = "PATTERN",
-		num_args(1..)
-	)]
-	pub exclude_path:     Option<Vec<Pattern>>,
-	/// Sets the regex for matching git tags.
-	#[arg(long, env = "GIT_CLIFF_TAG_PATTERN", value_name = "PATTERN")]
-	pub tag_pattern:      Option<Regex>,
-	/// Sets custom commit messages to include in the changelog.
-	#[arg(
-		long,
-		env = "GIT_CLIFF_WITH_COMMIT",
-		value_name = "MSG",
-		num_args(1..)
-	)]
-	pub with_commit:      Option<Vec<String>>,
-	/// Sets custom message for the latest release.
-	#[arg(
+    pub repository: Option<Vec<PathBuf>>,
+    /// Sets the path to include related commits.
+    // One value per occurrence: a greedy `num_args(1..)` here would absorb a
+    // trailing positional RANGE as one more pattern, silently dropping the
+    // range. Multiple patterns come via repeated flags or one
+    // space-delimited value.
+    #[arg(
+        long,
+        env = "GIT_CLIFF_INCLUDE_PATH",
+        value_name = "PATTERN",
+        value_delimiter = ' ',
+        num_args(1)
+    )]
+    pub include_path: Option<Vec<Pattern>>,
+    /// Sets the path to exclude related commits.
+    // Same one-value-per-occurrence constraint as `include_path` above.
+    #[arg(
+        long,
+        env = "GIT_CLIFF_EXCLUDE_PATH",
+        value_name = "PATTERN",
+        value_delimiter = ' ',
+        num_args(1)
+    )]
+    pub exclude_path: Option<Vec<Pattern>>,
+    /// Sets the regex for matching git tags.
+    #[arg(long, env = "GIT_CLIFF_TAG_PATTERN", value_name = "PATTERN")]
+    pub tag_pattern: Option<Regex>,
+    /// Sets custom commit messages to include in the changelog.
+    // One value per occurrence, same reasoning as `include_path`. No
+    // `value_delimiter` here: a commit message legitimately contains spaces
+    // (`--with-commit "<sha> feat: add X"` is a documented form), so repeated
+    // flags are the only multi-value form.
+    #[arg(long, env = "GIT_CLIFF_WITH_COMMIT", value_name = "MSG", num_args(1))]
+    pub with_commit: Option<Vec<String>>,
+    /// Sets custom message for the latest release.
+    #[arg(
 		long,
 		env = "GIT_CLIFF_WITH_TAG_MESSAGE",
 		value_name = "MSG",
 		num_args = 0..=1,
 	)]
-	pub with_tag_message: Option<String>,
-	/// Sets the tags to ignore in the changelog.
-	#[arg(long, env = "GIT_CLIFF_IGNORE_TAGS", value_name = "PATTERN")]
-	pub ignore_tags:      Option<Regex>,
-	/// Sets the tags to count in the changelog.
-	#[arg(long, env = "GIT_CLIFF_COUNT_TAGS", value_name = "PATTERN")]
-	pub count_tags:       Option<Regex>,
-	/// Sets commits that will be skipped in the changelog.
-	#[arg(
-		long,
-		env = "GIT_CLIFF_SKIP_COMMIT",
-		value_name = "SHA1",
-		num_args(1..)
-	)]
-	pub skip_commit:      Option<Vec<String>>,
-	/// Prepends entries to the given changelog file.
-	#[arg(
+    pub with_tag_message: Option<String>,
+    /// Sets the tags to skip in the changelog.
+    #[arg(long, env = "GIT_CLIFF_SKIP_TAGS", value_name = "PATTERN")]
+    pub skip_tags: Option<Regex>,
+    /// Sets the tags to ignore in the changelog.
+    #[arg(long, env = "GIT_CLIFF_IGNORE_TAGS", value_name = "PATTERN")]
+    pub ignore_tags: Option<Regex>,
+    /// Sets the tags to count in the changelog.
+    #[arg(long, env = "GIT_CLIFF_COUNT_TAGS", value_name = "PATTERN")]
+    pub count_tags: Option<Regex>,
+    /// Limits the number of tags to process.
+    #[arg(long, env = "GIT_CLIFF_LIMIT_TAGS", value_name = "N")]
+    pub limit_tags: Option<usize>,
+    /// Sets commits that will be skipped in the changelog.
+    // Same one-value-per-occurrence constraint. A `value_delimiter` would be
+    // safe here (SHA1s contain no spaces) but that is new behavior, not a fix,
+    // so repeated flags stay the multi-value form.
+    #[arg(long, env = "GIT_CLIFF_SKIP_COMMIT", value_name = "SHA1", num_args(1))]
+    pub skip_commit: Option<Vec<String>>,
+    /// Prepends entries to the given changelog file.
+    #[arg(
 	    short,
 	    long,
 	    env = "GIT_CLIFF_PREPEND",
 	    value_name = "PATH",
-	    value_parser = Opt::parse_dir
+	    value_parser = Opt::parse_dir,
+	    num_args = 0..=1,
+	    default_missing_value = DEFAULT_OUTPUT
 	)]
-	pub prepend:          Option<PathBuf>,
-	/// Writes output to the given file.
-	#[arg(
+    pub prepend: Option<PathBuf>,
+    /// Writes output to the given file.
+    #[arg(
 	    short,
 	    long,
 	    env = "GIT_CLIFF_OUTPUT",
@@ -197,152 +210,199 @@ pub struct Opt {
 	    num_args = 0..=1,
 	    default_missing_value = DEFAULT_OUTPUT
 	)]
-	pub output:           Option<PathBuf>,
-	/// Sets the tag for the latest version.
-	#[arg(
-		short,
-		long,
-		env = "GIT_CLIFF_TAG",
-		value_name = "TAG",
-		allow_hyphen_values = true
-	)]
-	pub tag:              Option<String>,
-	/// Bumps the version for unreleased changes. Optionally with specified
-	/// version.
-	#[arg(
+    pub output: Option<PathBuf>,
+    /// Sets the tag for the latest version.
+    #[arg(
+        short,
+        long,
+        env = "GIT_CLIFF_TAG",
+        value_name = "TAG",
+        allow_hyphen_values = true
+    )]
+    pub tag: Option<String>,
+    /// Bumps the version for unreleased changes. Optionally with specified
+    /// version.
+    #[arg(
         long,
         value_name = "BUMP",
         value_enum,
         num_args = 0..=1,
         default_missing_value = "auto",
         value_parser = clap::value_parser!(BumpOption))]
-	pub bump:             Option<BumpOption>,
-	/// Prints bumped version for unreleased changes.
-	#[arg(long, help_heading = Some("FLAGS"))]
-	pub bumped_version:   bool,
-	/// Sets the template for the changelog body.
-	#[arg(
-		short,
-		long,
-		env = "GIT_CLIFF_TEMPLATE",
-		value_name = "TEMPLATE",
-		allow_hyphen_values = true
-	)]
-	pub body:             Option<String>,
-	/// Processes the commits starting from the latest tag.
-	#[arg(short, long, help_heading = Some("FLAGS"))]
-	pub latest:           bool,
-	/// Processes the commits that belong to the current tag.
-	#[arg(long, help_heading = Some("FLAGS"))]
-	pub current:          bool,
-	/// Processes the commits that do not belong to a tag.
-	#[arg(short, long, help_heading = Some("FLAGS"))]
-	pub unreleased:       bool,
-	/// Sorts the tags topologically.
-	#[arg(long, help_heading = Some("FLAGS"))]
-	pub topo_order:       bool,
-	/// Include only the tags that belong to the current branch.
-	#[arg(long, help_heading = Some("FLAGS"))]
-	pub use_branch_tags:  bool,
-	/// Disables the external command execution.
-	#[arg(long, help_heading = Some("FLAGS"))]
-	pub no_exec:          bool,
-	/// Prints changelog context as JSON.
-	#[arg(short = 'x', long, help_heading = Some("FLAGS"))]
-	pub context:          bool,
-	/// Generates changelog from a JSON context.
-	#[arg(
+    pub bump: Option<BumpOption>,
+    /// Prints bumped version for unreleased changes.
+    #[arg(long, help_heading = Some("FLAGS"))]
+    pub bumped_version: bool,
+    /// Sets the template for the changelog body.
+    #[arg(
+        short,
+        long,
+        env = "GIT_CLIFF_TEMPLATE",
+        value_name = "TEMPLATE",
+        allow_hyphen_values = true
+    )]
+    pub body: Option<String>,
+    /// Reads the template for the changelog body from a file.
+    #[arg(long, value_name = "PATH", value_parser = Opt::parse_dir)]
+    pub body_file: Option<PathBuf>,
+    /// Processes the commits starting from the latest tag.
+    #[arg(short, long, help_heading = Some("FLAGS"))]
+    pub latest: bool,
+    /// Processes the commits that belong to the current tag.
+    #[arg(long, help_heading = Some("FLAGS"))]
+    pub current: bool,
+    /// Processes the commits that do not belong to a tag.
+    #[arg(short, long, help_heading = Some("FLAGS"))]
+    pub unreleased: bool,
+    /// Sorts the tags topologically.
+    #[arg(long, help_heading = Some("FLAGS"))]
+    pub topo_order: bool,
+    /// Include only the tags that belong to the current branch.
+    #[arg(long, help_heading = Some("FLAGS"))]
+    pub use_branch_tags: bool,
+    /// Disables the external command execution.
+    #[arg(long, help_heading = Some("FLAGS"))]
+    pub no_exec: bool,
+    /// Prints changelog context as JSON.
+    #[arg(short = 'x', long, help_heading = Some("FLAGS"))]
+    pub context: bool,
+    /// Generates changelog from a JSON context.
+    #[arg(
         long,
 	    value_name = "PATH",
 	    value_parser = Opt::parse_dir,
 		env = "GIT_CLIFF_CONTEXT",
     )]
-	pub from_context:     Option<PathBuf>,
-	/// Strips the given parts from the changelog.
-	#[arg(short, long, value_name = "PART", value_enum)]
-	pub strip:            Option<Strip>,
-	/// Sets sorting of the commits inside sections.
-	#[arg(
+    pub from_context: Option<PathBuf>,
+    /// Strips the given parts from the changelog.
+    #[arg(short, long, value_name = "PART", value_enum)]
+    pub strip: Option<Strip>,
+    /// Sets sorting of the commits inside sections.
+    #[arg(
 		long,
 		value_enum,
 		default_value_t = Sort::Oldest
 	)]
-	pub sort:             Sort,
-	/// Sets the commit range to process.
-	#[arg(value_name = "RANGE", help_heading = Some("ARGS"))]
-	pub range:            Option<String>,
-	/// Sets the GitHub API token.
-	#[arg(
+    pub sort: Sort,
+    /// Sets the GitHub API token.
+    #[arg(
 		long,
+		help_heading = "REMOTE OPTIONS",
 		env = "GITHUB_TOKEN",
 		value_name = "TOKEN",
 		hide_env_values = true,
 		hide = !cfg!(feature = "github"),
 	)]
-	pub github_token:     Option<SecretString>,
-	/// Sets the GitHub repository.
-	#[arg(
+    pub github_token: Option<SecretString>,
+    /// Sets the GitHub repository.
+    #[arg(
 		long,
+		help_heading = "REMOTE OPTIONS",
 		env = "GITHUB_REPO",
 		value_parser = clap::value_parser!(RemoteValue),
 		value_name = "OWNER/REPO",
 		hide = !cfg!(feature = "github"),
 	)]
-	pub github_repo:      Option<RemoteValue>,
-	/// Sets the GitLab API token.
-	#[arg(
+    pub github_repo: Option<RemoteValue>,
+    /// Sets the GitLab API token.
+    #[arg(
 		long,
+		help_heading = "REMOTE OPTIONS",
 		env = "GITLAB_TOKEN",
 		value_name = "TOKEN",
 		hide_env_values = true,
 		hide = !cfg!(feature = "gitlab"),
 	)]
-	pub gitlab_token:     Option<SecretString>,
-	/// Sets the GitLab repository.
-	#[arg(
+    pub gitlab_token: Option<SecretString>,
+    /// Sets the GitLab repository.
+    #[arg(
 		long,
+		help_heading = "REMOTE OPTIONS",
 		env = "GITLAB_REPO",
 		value_parser = clap::value_parser!(RemoteValue),
 		value_name = "OWNER/REPO",
 		hide = !cfg!(feature = "gitlab"),
 	)]
-	pub gitlab_repo:      Option<RemoteValue>,
-	/// Sets the Gitea API token.
-	#[arg(
+    pub gitlab_repo: Option<RemoteValue>,
+    /// Sets the Gitea API token.
+    #[arg(
 		long,
+		help_heading = "REMOTE OPTIONS",
 		env = "GITEA_TOKEN",
 		value_name = "TOKEN",
 		hide_env_values = true,
 		hide = !cfg!(feature = "gitea"),
 	)]
-	pub gitea_token:      Option<SecretString>,
-	/// Sets the Gitea repository.
-	#[arg(
+    pub gitea_token: Option<SecretString>,
+    /// Sets the Gitea repository.
+    #[arg(
 		long,
+		help_heading = "REMOTE OPTIONS",
 		env = "GITEA_REPO",
 		value_parser = clap::value_parser!(RemoteValue),
 		value_name = "OWNER/REPO",
 		hide = !cfg!(feature = "gitea"),
 	)]
-	pub gitea_repo:       Option<RemoteValue>,
-	/// Sets the Bitbucket API token.
-	#[arg(
+    pub gitea_repo: Option<RemoteValue>,
+    /// Sets the Bitbucket API token.
+    #[arg(
 		long,
+		help_heading = "REMOTE OPTIONS",
 		env = "BITBUCKET_TOKEN",
 		value_name = "TOKEN",
 		hide_env_values = true,
 		hide = !cfg!(feature = "bitbucket"),
 	)]
-	pub bitbucket_token:  Option<SecretString>,
-	/// Sets the Bitbucket repository.
-	#[arg(
+    pub bitbucket_token: Option<SecretString>,
+    /// Sets the Bitbucket repository.
+    #[arg(
 		long,
+		help_heading = "REMOTE OPTIONS",
 		env = "BITBUCKET_REPO",
 		value_parser = clap::value_parser!(RemoteValue),
 		value_name = "OWNER/REPO",
 		hide = !cfg!(feature = "bitbucket"),
 	)]
-	pub bitbucket_repo:   Option<RemoteValue>,
+    pub bitbucket_repo: Option<RemoteValue>,
+    /// Sets the Azure DevOps API token.
+    #[arg(
+		long,
+		help_heading = "REMOTE OPTIONS",
+		env = "AZURE_DEVOPS_TOKEN",
+		value_name = "TOKEN",
+		hide_env_values = true,
+		hide = !cfg!(feature = "azure_devops"),
+	)]
+    pub azure_devops_token: Option<SecretString>,
+    /// Sets the Azure DevOps repository.
+    #[arg(
+		long,
+		help_heading = "REMOTE OPTIONS",
+		env = "AZURE_DEVOPS_REPO",
+		value_parser = clap::value_parser!(RemoteValue),
+		value_name = "OWNER/REPO",
+		hide = !cfg!(feature = "azure_devops"),
+	)]
+    pub azure_devops_repo: Option<RemoteValue>,
+    /// Sets the HTTP timeout for remote metadata requests in seconds.
+    #[arg(
+		long,
+		help_heading = "REMOTE OPTIONS",
+		env = "GIT_CLIFF_HTTP_TIMEOUT",
+		value_name = "SECS",
+		hide = !cfg!(feature = "remote"),
+		value_parser = clap::value_parser!(u64)
+	)]
+    pub http_timeout: Option<u64>,
+    /// Sets the commit range to process.
+    #[arg(value_name = "RANGE", help_heading = Some("ARGS"))]
+    pub range: Option<String>,
+    /// Load TLS certificates from the native certificate store.
+    #[arg(long, help_heading = Some("FLAGS"), hide = !cfg!(feature = "remote"))]
+    pub use_native_tls: bool,
+    /// Disable network access for remote repositories.
+    #[arg(long, env = "GIT_CLIFF_OFFLINE", help_heading = Some("REMOTE OPTIONS"), hide = !cfg!(feature = "remote"))]
+    pub offline: bool,
 }
 
 /// Custom type for the remote value.
@@ -350,10 +410,10 @@ pub struct Opt {
 pub struct RemoteValue(pub Remote);
 
 impl ValueParserFactory for RemoteValue {
-	type Parser = RemoteValueParser;
-	fn value_parser() -> Self::Parser {
-		RemoteValueParser
-	}
+    type Parser = RemoteValueParser;
+    fn value_parser() -> Self::Parser {
+        RemoteValueParser
+    }
 }
 
 /// Parser for the remote value.
@@ -361,49 +421,49 @@ impl ValueParserFactory for RemoteValue {
 pub struct RemoteValueParser;
 
 impl TypedValueParser for RemoteValueParser {
-	type Value = RemoteValue;
-	fn parse_ref(
-		&self,
-		cmd: &clap::Command,
-		arg: Option<&clap::Arg>,
-		value: &std::ffi::OsStr,
-	) -> Result<Self::Value, clap::Error> {
-		let inner = clap::builder::StringValueParser::new();
-		let mut value = inner.parse_ref(cmd, arg, value)?;
-		if let Ok(url) = Url::parse(&value) {
-			value = url.path().trim_start_matches('/').to_string();
-		}
-		let parts = value.rsplit_once('/');
-		if let Some((owner, repo)) = parts {
-			Ok(RemoteValue(Remote::new(
-				owner.to_string(),
-				repo.to_string(),
-			)))
-		} else {
-			let mut err = clap::Error::new(ErrorKind::ValueValidation).with_cmd(cmd);
-			if let Some(arg) = arg {
-				err.insert(
-					ContextKind::InvalidArg,
-					ContextValue::String(arg.to_string()),
-				);
-			}
-			err.insert(ContextKind::InvalidValue, ContextValue::String(value));
-			Err(err)
-		}
-	}
+    type Value = RemoteValue;
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        let inner = clap::builder::StringValueParser::new();
+        let mut value = inner.parse_ref(cmd, arg, value)?;
+        if let Ok(url) = Url::parse(&value) {
+            value = url.path().trim_start_matches('/').to_string();
+        }
+        let parts = value.rsplit_once('/');
+        if let Some((owner, repo)) = parts {
+            Ok(RemoteValue(Remote::new(
+                owner.to_string(),
+                repo.to_string(),
+            )))
+        } else {
+            let mut err = clap::Error::new(ErrorKind::ValueValidation).with_cmd(cmd);
+            if let Some(arg) = arg {
+                err.insert(
+                    ContextKind::InvalidArg,
+                    ContextValue::String(arg.to_string()),
+                );
+            }
+            err.insert(ContextKind::InvalidValue, ContextValue::String(value));
+            Err(err)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum BumpOption {
-	Auto,
-	Specific(BumpType),
+    Auto,
+    Specific(BumpType),
 }
 
 impl ValueParserFactory for BumpOption {
-	type Parser = BumpOptionParser;
-	fn value_parser() -> Self::Parser {
-		BumpOptionParser
-	}
+    type Parser = BumpOptionParser;
+    fn value_parser() -> Self::Parser {
+        BumpOptionParser
+    }
 }
 
 /// Parser for bump type.
@@ -411,132 +471,376 @@ impl ValueParserFactory for BumpOption {
 pub struct BumpOptionParser;
 
 impl TypedValueParser for BumpOptionParser {
-	type Value = BumpOption;
-	fn parse_ref(
-		&self,
-		cmd: &clap::Command,
-		arg: Option<&clap::Arg>,
-		value: &std::ffi::OsStr,
-	) -> Result<Self::Value, clap::Error> {
-		let inner = clap::builder::StringValueParser::new();
-		let value = inner.parse_ref(cmd, arg, value)?;
-		match value.as_str() {
-			"auto" => Ok(BumpOption::Auto),
-			"major" => Ok(BumpOption::Specific(BumpType::Major)),
-			"minor" => Ok(BumpOption::Specific(BumpType::Minor)),
-			"patch" => Ok(BumpOption::Specific(BumpType::Patch)),
-			_ => {
-				let mut err =
-					clap::Error::new(ErrorKind::ValueValidation).with_cmd(cmd);
-				if let Some(arg) = arg {
-					err.insert(
-						ContextKind::InvalidArg,
-						ContextValue::String(arg.to_string()),
-					);
-				}
-				err.insert(ContextKind::InvalidValue, ContextValue::String(value));
-				Err(err)
-			}
-		}
-	}
+    type Value = BumpOption;
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        let inner = clap::builder::StringValueParser::new();
+        let value = inner.parse_ref(cmd, arg, value)?;
+        match value.as_str() {
+            "auto" => Ok(BumpOption::Auto),
+            "major" => Ok(BumpOption::Specific(BumpType::Major)),
+            "minor" => Ok(BumpOption::Specific(BumpType::Minor)),
+            "patch" => Ok(BumpOption::Specific(BumpType::Patch)),
+            _ => {
+                let mut err = clap::Error::new(ErrorKind::ValueValidation).with_cmd(cmd);
+                if let Some(arg) = arg {
+                    err.insert(
+                        ContextKind::InvalidArg,
+                        ContextValue::String(arg.to_string()),
+                    );
+                }
+                err.insert(ContextKind::InvalidValue, ContextValue::String(value));
+                Err(err)
+            }
+        }
+    }
 }
 
 impl Opt {
-	/// Custom string parser for directories.
-	///
-	/// Expands the tilde (`~`) character in the beginning of the
-	/// input string into contents of the path returned by [`home_dir`].
-	///
-	/// [`home_dir`]: dirs::home_dir
-	fn parse_dir(dir: &str) -> Result<PathBuf, String> {
-		Ok(PathBuf::from(shellexpand::tilde(dir).to_string()))
-	}
+    /// Custom string parser for directories.
+    ///
+    /// Expands the tilde (`~`) character in the beginning of the
+    /// input string into contents of the path returned by [`home_dir`].
+    ///
+    /// [`home_dir`]: dirs::home_dir
+    #[allow(clippy::unnecessary_wraps)]
+    fn parse_dir(dir: &str) -> Result<PathBuf, String> {
+        Ok(PathBuf::from(shellexpand::tilde(dir).to_string()))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-	use super::*;
-	use clap::CommandFactory;
-	use std::ffi::OsStr;
+    use std::env;
+    use std::ffi::OsStr;
 
-	#[test]
-	fn verify_cli() {
-		Opt::command().debug_assert();
-	}
+    use clap::CommandFactory;
+    use serial_test::serial;
 
-	#[test]
-	fn path_tilde_expansion() {
-		let home_dir = dirs::home_dir().expect("cannot retrieve home directory");
-		let dir = Opt::parse_dir("~/").expect("cannot expand tilde");
-		assert_eq!(home_dir, dir);
-	}
+    use super::*;
 
-	#[test]
-	fn remote_value_parser() -> Result<(), clap::Error> {
-		let remote_value_parser = RemoteValueParser;
-		assert_eq!(
-			RemoteValue(Remote::new("test", "repo")),
-			remote_value_parser.parse_ref(
-				&Opt::command(),
-				None,
-				OsStr::new("test/repo")
-			)?
-		);
-		assert_eq!(
-			RemoteValue(Remote::new("gitlab/group/test", "repo")),
-			remote_value_parser.parse_ref(
-				&Opt::command(),
-				None,
-				OsStr::new("gitlab/group/test/repo")
-			)?
-		);
-		assert_eq!(
-			RemoteValue(Remote::new("test", "testrepo")),
-			remote_value_parser.parse_ref(
-				&Opt::command(),
-				None,
-				OsStr::new("https://github.com/test/testrepo")
-			)?
-		);
-		assert_eq!(
-			RemoteValue(Remote::new("archlinux/packaging/packages", "arch-repro-status")),
-			remote_value_parser.parse_ref(
-				&Opt::command(),
-				None,
-				OsStr::new("https://gitlab.archlinux.org/archlinux/packaging/packages/arch-repro-status")
-			)?
-		);
-		assert!(remote_value_parser
-			.parse_ref(&Opt::command(), None, OsStr::new("test"))
-			.is_err());
-		assert!(remote_value_parser
-			.parse_ref(&Opt::command(), None, OsStr::new(""))
-			.is_err());
-		Ok(())
-	}
+    struct EnvVarGuard(&'static str);
 
-	#[test]
-	fn bump_option_parser() -> Result<(), clap::Error> {
-		let bump_option_parser = BumpOptionParser;
-		assert_eq!(
-			BumpOption::Auto,
-			bump_option_parser.parse_ref(
-				&Opt::command(),
-				None,
-				OsStr::new("auto")
-			)?
-		);
-		assert!(bump_option_parser
-			.parse_ref(&Opt::command(), None, OsStr::new("test"))
-			.is_err());
-		assert_eq!(
-			BumpOption::Specific(BumpType::Major),
-			bump_option_parser.parse_ref(
-				&Opt::command(),
-				None,
-				OsStr::new("major")
-			)?
-		);
-		Ok(())
-	}
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            unsafe { env::set_var(key, value) };
+            Self(key)
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            unsafe { env::remove_var(self.0) };
+        }
+    }
+
+    #[test]
+    fn verify_cli() {
+        Opt::command().debug_assert();
+    }
+
+    #[test]
+    fn parses_template_flags() {
+        let opt = Opt::try_parse_from([
+            "git-cliff",
+            "--list-templates",
+            "--templates-dir",
+            "/tmp/my-templates",
+        ])
+        .expect("template flags should parse");
+        assert!(opt.list_templates);
+        assert_eq!(opt.templates_dir, Some(PathBuf::from("/tmp/my-templates")));
+    }
+
+    #[test]
+    fn path_tilde_expansion() {
+        let home_dir = std::env::home_dir().expect("cannot retrieve home directory");
+        let dir = Opt::parse_dir("~/").expect("cannot expand tilde");
+        assert_eq!(home_dir, dir);
+    }
+
+    #[test]
+    fn remote_value_parser() -> Result<(), clap::Error> {
+        let remote_value_parser = RemoteValueParser;
+        assert_eq!(
+            RemoteValue(Remote::new("test", "repo")),
+            remote_value_parser.parse_ref(&Opt::command(), None, OsStr::new("test/repo"))?
+        );
+        assert_eq!(
+            RemoteValue(Remote::new("gitlab/group/test", "repo")),
+            remote_value_parser.parse_ref(
+                &Opt::command(),
+                None,
+                OsStr::new("gitlab/group/test/repo")
+            )?
+        );
+        assert_eq!(
+            RemoteValue(Remote::new("test", "testrepo")),
+            remote_value_parser.parse_ref(
+                &Opt::command(),
+                None,
+                OsStr::new("https://github.com/test/testrepo")
+            )?
+        );
+        assert_eq!(
+            RemoteValue(Remote::new(
+                "archlinux/packaging/packages",
+                "arch-repro-status"
+            )),
+            remote_value_parser.parse_ref(
+                &Opt::command(),
+                None,
+                OsStr::new(
+                    "https://gitlab.archlinux.org/archlinux/packaging/packages/arch-repro-status"
+                )
+            )?
+        );
+        assert!(
+            remote_value_parser
+                .parse_ref(&Opt::command(), None, OsStr::new("test"))
+                .is_err()
+        );
+        assert!(
+            remote_value_parser
+                .parse_ref(&Opt::command(), None, OsStr::new(""))
+                .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn bump_option_parser() -> Result<(), clap::Error> {
+        let bump_option_parser = BumpOptionParser;
+        assert_eq!(
+            BumpOption::Auto,
+            bump_option_parser.parse_ref(&Opt::command(), None, OsStr::new("auto"))?
+        );
+        assert!(
+            bump_option_parser
+                .parse_ref(&Opt::command(), None, OsStr::new("test"))
+                .is_err()
+        );
+        assert_eq!(
+            BumpOption::Specific(BumpType::Major),
+            bump_option_parser.parse_ref(&Opt::command(), None, OsStr::new("major"))?
+        );
+        Ok(())
+    }
+
+    // Environment variables are process-global, so tests that modify them must run exclusively and
+    // restore the original state after execution. For this reason, we use the `serial` macro
+    // from the `serial_test` crate to guarantee exclusive execution. See: https://crates.io/crates/serial_test
+    #[test]
+    #[serial]
+    fn path_env_vars_are_split_into_multiple_patterns() -> Result<(), Box<dyn std::error::Error>> {
+        let _include = EnvVarGuard::set("GIT_CLIFF_INCLUDE_PATH", "website/**/* .github/**/*");
+        let _exclude = EnvVarGuard::set("GIT_CLIFF_EXCLUDE_PATH", "docs/**/* tests/**/*");
+
+        let opt = Opt::try_parse_from(["git-cliff"])?;
+
+        assert_eq!(
+            Some(vec![
+                Pattern::new("website/**/*")?,
+                Pattern::new(".github/**/*")?,
+            ]),
+            opt.include_path
+        );
+        assert_eq!(
+            Some(vec![
+                Pattern::new("docs/**/*")?,
+                Pattern::new("tests/**/*")?
+            ]),
+            opt.exclude_path
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn cli_include_path_does_not_swallow_trailing_positional_range() {
+        // `--include-path` takes exactly one value per occurrence, so a
+        // trailing positional RANGE lands in the RANGE slot instead of being
+        // absorbed as one more glob. Under the old greedy `num_args(1..)`
+        // declaration this exact argv silently lost the range and emitted the
+        // whole (path-filtered) history.
+        let opt = Opt::try_parse_from([
+            "git-cliff",
+            "--include-path",
+            "pkg/**",
+            "pkg/v1.0.0..pkg/v1.1.0",
+        ])
+        .expect("parse");
+        assert_eq!(opt.range.as_deref(), Some("pkg/v1.0.0..pkg/v1.1.0"));
+        assert_eq!(
+            opt.include_path,
+            Some(vec![Pattern::new("pkg/**").expect("pattern")])
+        );
+    }
+
+    #[test]
+    fn cli_exclude_path_does_not_swallow_trailing_positional_range() {
+        let opt = Opt::try_parse_from([
+            "git-cliff",
+            "--exclude-path",
+            "pkg/**",
+            "pkg/v1.0.0..pkg/v1.1.0",
+        ])
+        .expect("parse");
+        assert_eq!(opt.range.as_deref(), Some("pkg/v1.0.0..pkg/v1.1.0"));
+        assert_eq!(
+            opt.exclude_path,
+            Some(vec![Pattern::new("pkg/**").expect("pattern")])
+        );
+    }
+
+    #[test]
+    fn cli_include_path_multiple_patterns_still_parse() {
+        // The two supported multi-pattern forms: repeated flags, and a single
+        // space-delimited value (what the space-separated fixture passes).
+        let repeated = Opt::try_parse_from([
+            "git-cliff",
+            "--include-path",
+            "website/**/*",
+            "--include-path",
+            "docs/**/*",
+        ])
+        .expect("parse");
+        let delimited =
+            Opt::try_parse_from(["git-cliff", "--include-path", "website/**/* docs/**/*"])
+                .expect("parse");
+        for opt in [&repeated, &delimited] {
+            assert_eq!(
+                opt.include_path,
+                Some(vec![
+                    Pattern::new("website/**/*").expect("pattern"),
+                    Pattern::new("docs/**/*").expect("pattern"),
+                ])
+            );
+        }
+    }
+
+    #[test]
+    fn cli_include_path_unquoted_second_token_falls_to_range_slot() {
+        // Characterization of the compatibility trade-off: the unquoted
+        // multi-token form (`--include-path a b`, no quotes) used to be
+        // absorbed greedily; now the second token lands in the positional
+        // RANGE slot and fails loudly at revparse instead of silently
+        // producing a wrong changelog.
+        let opt = Opt::try_parse_from(["git-cliff", "--include-path", "website/**/*", "docs/**/*"])
+            .expect("parse");
+        assert_eq!(
+            opt.include_path,
+            Some(vec![Pattern::new("website/**/*").expect("pattern")])
+        );
+        assert_eq!(opt.range.as_deref(), Some("docs/**/*"));
+    }
+
+    #[test]
+    fn cli_positional_range_before_include_path_is_not_swallowed() {
+        let opt = Opt::try_parse_from([
+            "git-cliff",
+            "pkg/v1.0.0..pkg/v1.1.0",
+            "--include-path",
+            "pkg/**",
+        ])
+        .expect("parse");
+        assert_eq!(opt.range.as_deref(), Some("pkg/v1.0.0..pkg/v1.1.0"));
+        assert_eq!(
+            opt.include_path,
+            Some(vec![Pattern::new("pkg/**").expect("pattern")])
+        );
+    }
+
+    #[test]
+    fn cli_double_dash_protects_trailing_positional_range() {
+        let opt = Opt::try_parse_from([
+            "git-cliff",
+            "--include-path",
+            "pkg/**",
+            "--",
+            "pkg/v1.0.0..pkg/v1.1.0",
+        ])
+        .expect("parse");
+        assert_eq!(opt.range.as_deref(), Some("pkg/v1.0.0..pkg/v1.1.0"));
+        assert_eq!(
+            opt.include_path,
+            Some(vec![Pattern::new("pkg/**").expect("pattern")])
+        );
+    }
+
+    #[test]
+    fn cli_with_commit_does_not_swallow_trailing_positional_range() {
+        let opt = Opt::try_parse_from([
+            "git-cliff",
+            "--with-commit",
+            "feat: add x",
+            "v1.0.0..v1.1.0",
+        ])
+        .expect("parse");
+        assert_eq!(opt.range.as_deref(), Some("v1.0.0..v1.1.0"));
+        assert_eq!(opt.with_commit, Some(vec!["feat: add x".to_string()]));
+    }
+
+    #[test]
+    fn cli_skip_commit_does_not_swallow_trailing_positional_range() {
+        let opt = Opt::try_parse_from([
+            "git-cliff",
+            "--skip-commit",
+            "a78bc368e9ee382a3016c0c4bab41f7de4503bcd",
+            "v1.0.0..v1.1.0",
+        ])
+        .expect("parse");
+        assert_eq!(opt.range.as_deref(), Some("v1.0.0..v1.1.0"));
+        assert_eq!(
+            opt.skip_commit,
+            Some(vec!["a78bc368e9ee382a3016c0c4bab41f7de4503bcd".to_string()])
+        );
+    }
+
+    #[test]
+    fn cli_with_commit_keeps_whitespace_inside_one_value() {
+        // No `value_delimiter` on this flag, so the documented
+        // "<sha> <message>" form stays a single value rather than splitting
+        // into two patterns the way the path flags do.
+        let opt = Opt::try_parse_from([
+            "git-cliff",
+            "--with-commit",
+            "8f55e69eba6e6ce811ace32bd84cc82215673cb6 feat: add X",
+        ])
+        .expect("parse");
+        assert_eq!(
+            opt.with_commit,
+            Some(vec![
+                "8f55e69eba6e6ce811ace32bd84cc82215673cb6 feat: add X".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn cli_repeated_flags_remain_the_multi_value_form() {
+        let opt = Opt::try_parse_from([
+            "git-cliff",
+            "--with-commit",
+            "feat: a",
+            "--with-commit",
+            "feat: b",
+            "--skip-commit",
+            "aaaaaaa",
+            "--skip-commit",
+            "bbbbbbb",
+        ])
+        .expect("parse");
+        assert_eq!(
+            opt.with_commit,
+            Some(vec!["feat: a".to_string(), "feat: b".to_string()])
+        );
+        assert_eq!(
+            opt.skip_commit,
+            Some(vec!["aaaaaaa".to_string(), "bbbbbbb".to_string()])
+        );
+    }
 }

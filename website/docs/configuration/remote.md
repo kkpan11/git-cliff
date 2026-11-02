@@ -56,14 +56,48 @@ Same applies for GitLab/Bitbucket with `--gitlab-token`/`--gitea-token`/`--bitbu
 
 Sets the API URL for a particular remote.
 
+### http_timeout
+
+Sets the HTTP request timeout for remote metadata fetches.
+
+This value is a duration, for example:
+
+```toml
+[remote.github]
+http_timeout = "60s"
+```
+
+You can also override it from the CLI with `--http-timeout <SECS>` or via the `GIT_CLIFF_HTTP_TIMEOUT` environment variable.
+
+### native_tls
+
+When set to `true`, the TLS certificates are loaded from the platform's native certificate store.
+
+:::info
+
+By default, **git-cliff** loads certificates from the bundled [`webpki-roots`](https://github.com/rustls/webpki-roots) crate which is a reliable set of trust roots from Mozilla.
+
+However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.
+
+:::
+
+### offline
+
+When the `--offline` argument, `GIT_CLIFF_OFFLINE` environment variable, or configuration parameter is set, **git-cliff** ensures that no external calls or requests are made, despite a remote being configured. This can be useful when running `--bumped-version` or in a limited environment.
+
 ---
 
 Here is a complete example for a project hosted on GitLab:
 
 ```toml
+[remote]
+offline = false
+
 [remote.gitlab]
 owner = "archlinux"
 repo = "arch-repro-status"
 api_url = "https://gitlab.archlinux.org/api/v4"
 token = "deadbeef"
+http_timeout = "60s"
+native_tls = false
 ```

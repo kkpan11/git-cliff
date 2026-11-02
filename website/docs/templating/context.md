@@ -58,12 +58,43 @@ following context is generated to use for templating:
         "email": "user.email@example.com",
         "timestamp": 1660330071
       },
+      "statistics": {
+        "files_changed": 1,
+        "additions": 1,
+        "deletions": 0
+      },
       "raw_message": "<type>[scope]: <description>\n[body]\n[footer(s)]"
     }
   ],
   "commit_id": "a440c6eb26404be4877b7e3ad592bfaa5d4eb210 (release commit)",
   "timestamp": 1625169301,
   "repository": "/path/to/repository",
+  "commit_range": {
+      "from": "(id of the first commit used for this release)",
+      "to": "(id of the last commit used for this release)"
+  "submodule_commits": {
+    "<relative/submodule_path/in/repository>": [
+      {
+        "id": "c10d0f12e85975bc1e8f41eed693c58eca1894eb",
+        "message": "release (#1671)",
+        ...
+      },
+    ],
+  },
+  "statistics": {
+    "commit_count": 1,
+    "commits_timespan": 0,
+    "conventional_commit_count": 1,
+    "links": [
+      {
+        "text": "#452",
+        "href": "https://github.com/orhun/git-cliff/issues/452",
+        "count": 1
+      }
+    ],
+    "days_passed_since_last_release": 0
+  },
+  "bump_type": "minor",
   "previous": {
     "version": "previous release"
   }
@@ -72,7 +103,7 @@ following context is generated to use for templating:
 
 :::info
 
-See the [GitHub integration](/docs/integration/github) for the additional values you can use in the template.
+See [Remote metadata](#remote-metadata) for additional commit values provided by remote integrations.
 
 :::
 
@@ -123,6 +154,27 @@ From [Git docs](https://git-scm.com/book/en/v2/Git-Basics-Viewing-the-Commit-His
 
 > You may be wondering what the difference is between author and committer. The author is the person who originally wrote the work, whereas the committer is the person who last applied the work. So, if you send in a patch to a project and one of the core members applies the patch, both of you get credit — you as the author, and the core member as the committer.
 
+### Remote metadata
+
+When a remote integration returns a commit, it adds the following `remote`
+object to the commit context. Pull request fields are populated when that commit
+is matched with a pull request:
+
+```json
+{
+  "username": "commit-author",
+  "pr_author": "pull-request-author",
+  "pr_title": "feat: add a feature",
+  "pr_number": 42,
+  "pr_labels": ["enhancement"]
+}
+```
+
+`username` is resolved from the commit author, while `pr_author` is the account
+that opened the pull request. These values can differ, particularly for squash
+merges. See the [integration documentation](/docs/category/integration) for
+provider-specific behavior.
+
 ## Non-Conventional Commits
 
 > conventional_commits = **false**
@@ -154,12 +206,35 @@ If [`conventional_commits`](/docs/configuration/git#conventional_commits) is set
         "email": "user.email@example.com",
         "timestamp": 1660330071
       },
+      "statistics": {
+        "files_changed": 1,
+        "additions": 1,
+        "deletions": 0
+      },
       "raw_message": "(full commit message including description, footers, etc.)"
     }
   ],
   "commit_id": "a440c6eb26404be4877b7e3ad592bfaa5d4eb210 (release commit)",
   "timestamp": 1625169301,
   "repository": "/path/to/repository",
+  "commit_range": {
+      "from": "(id of the first commit used for this release)",
+      "to": "(id of the last commit used for this release)",
+  },
+  "statistics": {
+    "commit_count": 1,
+    "commits_timespan": 0,
+    "conventional_commit_count": 0,
+    "links": [
+      {
+        "text": "#452",
+        "href": "https://github.com/orhun/git-cliff/issues/452",
+        "count": 1
+      }
+    ],
+    "days_passed_since_last_release": 0
+  },
+  "bump_type": "minor",
   "previous": {
     "version": "previous release"
   }
@@ -168,6 +243,65 @@ If [`conventional_commits`](/docs/configuration/git#conventional_commits) is set
 
 :::info
 
-See the [GitHub integration](/docs/integration/github) for the additional values you can use in the template.
+See [Remote metadata](#remote-metadata) for additional commit values provided by remote integrations.
 
 :::
+
+## Commit statistics
+
+Each commit contains a `statistics` object with diff metrics for that commit.
+The following fields are available:
+
+- `files_changed`: Total number of files changed in the commit.
+- `additions`: Total number of inserted lines in the commit.
+- `deletions`: Total number of deleted lines in the commit.
+
+You can use these fields in your templates like so:
+
+```jinja2
+{% for commit in commits %}
+- {{ commit.message }} ({{ commit.statistics.files_changed }} files, +{{ commit.statistics.additions }}, -{{ commit.statistics.deletions }})
+{% endfor %}
+```
+
+## Release statistics
+
+You can access various release-related metrics via the `statistics` variable. The following fields are available:
+
+- `commit_count`: Total number of commits in the release.
+- `commits_timespan`: Number of days between the first and last commit.
+- `conventional_commit_count`: Number of commits that follow the Conventional Commits spec.
+- `links`: A list of issues or links referenced in commit messages, each with text, href, and count.
+- `days_passed_since_last_release`: Days since the previous release, if available.
+
+You can use these fields in your templates like so:
+
+```jinja2
+- {{ statistics.commit_count }} commit(s) contributed to the release.
+- {{ statistics.commits_timespan | default(value=0) }} day(s) passed between the first and last commit.
+- {{ statistics.conventional_commit_count }} commit(s) parsed as conventional.
+- {{ statistics.links | length }} linked issue(s) detected in commits.
+{%- if statistics.links | length > 0 %}
+	{%- for link in statistics.links %}
+        {{ "  " }}- [{{ link.text }}]({{ link.href }}) (referenced {{ link.count }} time(s))
+	{%- endfor %}
+{%- endif %}
+{%- if statistics.days_passed_since_last_release %}
+	- {{ statistics.days_passed_since_last_release }} day(s) passed between releases.
+{%- endif %}
+```
+
+This results in the following output:
+
+<details>
+  <summary>Rendered Output</summary>
+
+### Commit Statistics
+
+- 2 commit(s) contributed to the release.
+- 0 day(s) passed between the first and last commit.
+- 2 commit(s) parsed as conventional.
+- 0 linked issue(s) detected in commits.
+- 1430 day(s) passed between releases.
+
+</details>

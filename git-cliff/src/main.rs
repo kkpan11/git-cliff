@@ -1,51 +1,97 @@
+use std::fs::File;
+use std::path::Path;
+use std::{env, io, process};
+
 use clap::Parser;
 use git_cliff::args::Opt;
-use git_cliff::logger;
+use git_cliff::{init_config_from, logger};
+use git_cliff_core::DEFAULT_CONFIG;
+use git_cliff_core::embed::BuiltinConfig;
 use git_cliff_core::error::Result;
-use std::env;
-use std::process;
 
 /// Profiler.
 #[cfg(feature = "profiler")]
 mod profiler;
 
 fn main() -> Result<()> {
-	// Parse the command line arguments
-	let args = Opt::parse();
-	if args.verbose == 1 {
-		env::set_var("RUST_LOG", "debug");
-	} else if args.verbose > 1 {
-		env::set_var("RUST_LOG", "trace");
-	} else if env::var_os("RUST_LOG").is_none() {
-		env::set_var("RUST_LOG", "info");
-	}
-	logger::init()?;
+    // Parse the command line arguments
+    let args = Opt::parse();
+    if args.verbose == 1 {
+        unsafe { env::set_var("RUST_LOG", "debug") };
+    } else if args.verbose > 1 {
+        unsafe { env::set_var("RUST_LOG", "trace") };
+    } else if env::var_os("RUST_LOG").is_none() {
+        unsafe { env::set_var("RUST_LOG", "info") };
+    }
+    logger::init()?;
 
-	// Initialize the profiler guard if the feature is enabled
-	let mut _profiler_guard = None;
-	#[cfg(feature = "profiler")]
-	{
-		_profiler_guard = profiler::start_profiling();
-	}
-	#[cfg(not(feature = "profiler"))]
-	{
-		_profiler_guard = Some(());
-	}
+    // Initialize the profiler guard if the feature is enabled
+    let mut _profiler_guard = None;
+    #[cfg(feature = "profiler")]
+    {
+        _profiler_guard = profiler::start_profiling();
+    }
+    #[cfg(not(feature = "profiler"))]
+    {
+        _profiler_guard = Some(());
+    }
 
-	// Run git-cliff
-	let exit_code = match git_cliff::run(args) {
-		Ok(()) => 0,
-		Err(e) => {
-			log::error!("{}", e);
-			1
-		}
-	};
+    // Check if there is a new version available.
+    #[cfg(feature = "update-informer")]
+    if !args.offline {
+        git_cliff::check_new_version();
+    }
 
-	// Report the profiler if the feature is enabled
-	#[cfg(feature = "profiler")]
-	{
-		profiler::finish_profiling(_profiler_guard)?;
-	}
+    // Print the available templates if requested.
+    if args.list_templates {
+        for name in BuiltinConfig::list_templates(args.templates_dir.as_deref())? {
+            println!("{name}");
+        }
+        return Ok(());
+    }
 
-	process::exit(exit_code);
+    // Create the configuration file if init flag is given.
+    if let Some(path) = &args.init {
+        init_config_from(
+            path.as_deref(),
+            args.templates_dir.as_deref(),
+            args.config.as_deref().unwrap_or(Path::new(DEFAULT_CONFIG)),
+        )?;
+        return Ok(());
+    }
+
+    // Generate a changelog.
+    let changelog = git_cliff::run(args.clone())?;
+
+    // Get output destination.
+    let output = args
+        .output
+        .clone()
+        .or(changelog.config.changelog.output.clone());
+    let out: Box<dyn io::Write> = if let Some(path) = &output {
+        if path == Path::new("-") {
+            Box::new(io::stdout())
+        } else {
+            Box::new(io::BufWriter::new(File::create(path)?))
+        }
+    } else {
+        Box::new(io::stdout())
+    };
+
+    // Write the changelog.
+    let exit_code = match git_cliff::write_changelog(&args, changelog, out) {
+        Ok(()) => 0,
+        Err(e) => {
+            tracing::error!("{e}");
+            1
+        }
+    };
+
+    // Report the profiler if the feature is enabled
+    #[cfg(feature = "profiler")]
+    {
+        profiler::finish_profiling(_profiler_guard)?;
+    }
+
+    process::exit(exit_code);
 }

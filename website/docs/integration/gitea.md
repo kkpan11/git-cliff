@@ -59,6 +59,14 @@ You can use the `GITEA_API_URL` environment variable want to override the API UR
 
 :::
 
+:::info
+
+If you are getting invalid peer certificate errors, you can use the `--use-native-tls` flag to load certificates from the platform's native certificate store.
+
+It is also possible to configure this in the configuration file, see the [remote configuration](/docs/configuration/remote#native_tls) for more information.
+
+:::
+
 ## Templating
 
 :::tip
@@ -88,7 +96,7 @@ https://codeberg.org/{{ remote.gitea.owner }}/{{ remote.gitea.repo }}/commits/ta
 
 ### Commit authors
 
-For each commit, Gitea related values are added as a nested object (named `gitea`) to the [template context](/docs/templating/context):
+For each commit, Gitea related values are added as a nested object (named `remote`) to the [template context](/docs/templating/context):
 
 ```json
 {
@@ -100,6 +108,7 @@ For each commit, Gitea related values are added as a nested object (named `gitea
 
   "remote": {
     "username": "orhun",
+    "pr_author": "orhun",
     "pr_title": "some things have changed",
     "pr_number": 420,
     "pr_labels": ["rust"],
@@ -124,6 +133,17 @@ The will result in:
 - feat(commit): add merge_commit flag to the context by @orhun in #389
 - feat(args): set `CHANGELOG.md` as default missing value for output option by @sh-cho in #354
 ```
+
+`username` is resolved from the commit author, whereas `pr_author` is the account that
+opened the pull request. They can differ, so a template that wants to credit the
+contributor rather than whoever the commit resolves to can prefer `pr_author`:
+
+```jinja2
+{% if commit.remote.pr_author or commit.remote.username %} by @{{ commit.remote.pr_author | default(value=commit.remote.username) }}{% endif %}
+```
+
+The guard matters: `commit.remote` is absent for any commit the remote API did not return, and an
+unguarded lookup on it aborts the whole render.
 
 ### Contributors
 

@@ -17,10 +17,23 @@ jobs:
       matrix:
         include:
           - fixtures-name: new-fixture-template
+          - fixtures-name: test-group-by-scope-filter
           - fixtures-name: test-github-integration
+          - fixtures-name: test-github-integration-custom-range
+            command: v1.0.0..v1.0.1
+          - fixtures-name: test-github-integration-skipped-contributors
           - fixtures-name: test-gitlab-integration
+          - fixtures-name: test-gitlab-integration-custom-range
+            command: 9f66ac0f76..89de5e8e50
           - fixtures-name: test-gitea-integration
+          - fixtures-name: test-gitea-integration-custom-range
+            command: 5ed596d935..c074c439b5
           - fixtures-name: test-bitbucket-integration
+          - fixtures-name: test-bitbucket-integration-custom-range
+            command: v1.0.0..v1.0.1
+          - fixtures-name: test-azure-devops-integration
+          - fixtures-name: test-azure-devops-integration-custom-range
+            command: v1.0.0..v1.0.1
           - fixtures-name: test-ignore-tags
           - fixtures-name: test-invert-ignore-tags
           - fixtures-name: test-topo-order
@@ -34,8 +47,10 @@ jobs:
           - fixtures-name: test-commit-footers
           - fixtures-name: test-commit-preprocessors
           - fixtures-name: test-conventional-commit
+          - fixtures-name: test-changelog-format-markdown
           - fixtures-name: test-custom-scope
           - fixtures-name: test-limit-commits
+          - fixtures-name: test-limit-tags
           - fixtures-name: test-skip-breaking-changes
           - fixtures-name: test-split-commits
           - fixtures-name: test-bump-version
@@ -49,6 +64,8 @@ jobs:
           - fixtures-name: test-bump-version-custom-minor
             command: --bump
           - fixtures-name: test-bumped-version
+            command: --bumped-version
+          - fixtures-name: test-bumped-version-no-increment
             command: --bumped-version
           - fixtures-name: test-footer-template
           - fixtures-name: test-keep-a-changelog-links
@@ -89,13 +106,19 @@ jobs:
             command: --bump --tag=2.1.1
           - fixtures-name: test-cli-arg-ignore-tags
             command: --ignore-tags ".*beta"
+          - fixtures-name: test-cli-arg-skip-tags
+            command: --skip-tags ".*beta"
           - fixtures-name: test-tag-message
           - fixtures-name: test-bump-unreleased-with-tag-message-arg
             command: --bump --unreleased --with-tag-message "Some text"
+          - fixtures-name: test-unreleased-tag-missing-release-commit
+            command: --unreleased --tag 0.3.0
           - fixtures-name: test-from-context
             command: --from-context context.json
           - fixtures-name: test-from-context-does-not-discard-fields
             command: --from-context context.json
+          - fixtures-name: test-github-contributor-pr-numbers
+            command: v2.12.0..v2.13.0
           - fixtures-name: test-always-render-unreleased
             command: --unreleased
           - fixtures-name: test-always-render
@@ -104,15 +127,83 @@ jobs:
             command: --tag v0.2.0
           - fixtures-name: test-custom-remote-api-url
             command: v1.4.0..v1.4.1
+          # NOTE: These two entries share one fixture (and one expected.md).
+          # The second puts the positional range AFTER --include-path: since
+          # include-path takes exactly one value per occurrence, the trailing
+          # range lands in the RANGE slot. (Under the old greedy num_args(1..)
+          # it was absorbed as one more glob and silently dropped.)
           - fixtures-name: test-monorepo-include-path
             command: v2.6.1..v2.7.0 --include-path .github/fixtures/
+          - fixtures-name: test-monorepo-include-path
+            command: --include-path .github/fixtures/ v2.6.1..v2.7.0
+          - fixtures-name: test-require-conventional-negative
+          - fixtures-name: test-require-conventional-skipped
+          - fixtures-name: test-submodules
+          - fixtures-name: test-submodules-range
+            command: v0.1.0..HEAD
+          - fixtures-name: test-submodules-include-path
+            command: --include-path submodule_two
+          - fixtures-name: test-submodules-include-path-config
+          - fixtures-name: test-remote-config
+            command: --config-url "https://github.com/orhun/git-cliff/blob/main/.github/fixtures/new-fixture-template/cliff.toml?raw=true"
+          - fixtures-name: test-topo-order-commits
+          - fixtures-name: test-tag-assignment-merged-branch
+          - fixtures-name: test-commit-range
+          - fixtures-name: test-commit-statistics
+          - fixtures-name: test-commit-range-with-sort-commits
+          - fixtures-name: test-commit-range-with-given-range
+            command: a140cef^..a9d4050 --ignore-tags "."
+          - fixtures-name: test-override-scope
+          - fixtures-name: test-multiple-commit-parsers
+          - fixtures-name: test-commit-parser-and-semantics
+          - fixtures-name: test-regex-json-array
+          - fixtures-name: test-release-statistics
+            previous-release-timestamp: "2022-04-06 01:25:12"
+          - fixtures-name: test-workdir-include-path
+            command: v2.6.1..v2.7.0 --workdir .github/fixtures/
+          # Regression test for #1369: `--workdir` at the repository root must
+          # include every commit instead of producing empty output. Using an
+          # absolute path ($PWD) exercises the path that previously built an
+          # absolute include pattern that matched no repo-relative diff paths.
+          - fixtures-name: test-workdir-repo-root
+            command: --workdir "$PWD"
+          # Regression test for #1369: a relative `--workdir .` must not filter
+          # out file-less commits. Setting --workdir added an include-path, so
+          # commits with no file changes were dropped and the output was empty.
+          - fixtures-name: test-workdir-empty-commit
+            command: --workdir .
+          - fixtures-name: test-fail-on-unmatched-commit
+          # NOTE: The following four include-path tests all use identical
+          # expected.md content. They verify that the same result is produced
+          # whether paths are passed via repeated --include-path flags, a
+          # single space-separated value, the cliff.toml include_paths config,
+          # or the GIT_CLIFF_INCLUDE_PATH environment variable.
+          - fixtures-name: test-include-path-repeated-flag
+            command: --include-path 'website/**/*' --include-path 'docs/**/*'
+          - fixtures-name: test-include-path-space-separated
+            command: --include-path 'website/**/* docs/**/*'
+          - fixtures-name: test-include-path-config
+          - fixtures-name: test-include-path-env-var
+            include-path-env: "website/**/* docs/**/*"
+          # NOTE: This test verifies that GIT_CLIFF_INCLUDE_PATH correctly
+          # handles space-separated globs where one glob matches no commits
+          # (i.e. .github/**/* does not exist in the fixture's git history).
+          # Only website/**/* commits are expected in the output.
+          - fixtures-name: test-include-path-env-var-github
+            include-path-env: "website/**/* .github/**/*"
+          - fixtures-name: test-offline
+          - fixtures-name: test-nested-tags
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run a fixtures test
         uses: ./.github/actions/run-fixtures-test
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           fixtures-dir: .github/fixtures/${{ matrix.fixtures-name }}
           command: ${{ matrix.command }}
+          previous-release-timestamp: ${{ matrix.previous-release-timestamp }}
+          include-path-env: ${{ matrix.include-path-env }}

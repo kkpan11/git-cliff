@@ -73,6 +73,13 @@
           "pr_labels": [],
           "is_first_time": false
         },
+        "azure_devops": {
+          "username": null,
+          "pr_title": null,
+          "pr_number": null,
+          "pr_labels": [],
+          "is_first_time": false
+        },
         "raw_message": "feat(web): feature 1, breaking change in footer\n\nBody feature 1\n\nBREAKING CHANGE: breaking change description feature 1\nSigned-off-by: user1 <user1@example.com>\nReviewed-by: user2"
       },
       {
@@ -127,6 +134,13 @@
           "is_first_time": false
         },
         "bitbucket": {
+          "username": null,
+          "pr_title": null,
+          "pr_number": null,
+          "pr_labels": [],
+          "is_first_time": false
+        },
+        "azure_devops": {
           "username": null,
           "pr_title": null,
           "pr_number": null,
@@ -193,6 +207,13 @@
           "pr_labels": [],
           "is_first_time": false
         },
+        "azure_devops": {
+          "username": null,
+          "pr_title": null,
+          "pr_number": null,
+          "pr_labels": [],
+          "is_first_time": false
+        },
         "raw_message": "feat!: feature 3, use default scope = app\n\nBody feature 2\n\nSigned-off-by: user3 <user3@example.com>"
       },
       {
@@ -200,7 +221,12 @@
         "message": "fix 1, use scope as group",
         "body": "Body fix 1",
         "footers": [
-          { "token": "Fix", "separator": ":", "value": "#1", "breaking": false }
+          {
+            "token": "Fix",
+            "separator": ":",
+            "value": "#1",
+            "breaking": false
+          }
         ],
         "group": "fix",
         "breaking_description": null,
@@ -242,6 +268,13 @@
           "is_first_time": false
         },
         "bitbucket": {
+          "username": null,
+          "pr_title": null,
+          "pr_number": null,
+          "pr_labels": [],
+          "is_first_time": false
+        },
+        "azure_devops": {
           "username": null,
           "pr_title": null,
           "pr_number": null,
@@ -301,6 +334,13 @@
           "pr_labels": [],
           "is_first_time": false
         },
+        "azure_devops": {
+          "username": null,
+          "pr_title": null,
+          "pr_number": null,
+          "pr_labels": [],
+          "is_first_time": false
+        },
         "raw_message": "fix(front-end): fix 2, no footer\n\nBody fix 2"
       },
       {
@@ -314,7 +354,12 @@
             "value": "#3",
             "breaking": false
           },
-          { "token": "Fix", "separator": ":", "value": "#4", "breaking": false }
+          {
+            "token": "Fix",
+            "separator": ":",
+            "value": "#4",
+            "breaking": false
+          }
         ],
         "group": "fix",
         "breaking_description": null,
@@ -362,6 +407,13 @@
           "pr_labels": [],
           "is_first_time": false
         },
+        "azure_devops": {
+          "username": null,
+          "pr_title": null,
+          "pr_number": null,
+          "pr_labels": [],
+          "is_first_time": false
+        },
         "raw_message": "fix(front-end): fix 3 and 4, no body but footer\n\nFix: #3\nFix: #4"
       }
     ],
@@ -375,17 +427,43 @@
       "timestamp": 0,
       "previous": null,
       "repository": null,
+      "commit_range": null,
+      "submodule_commits": {},
       "extra": null,
-      "github": { "contributors": [] },
-      "gitlab": { "contributors": [] },
-      "gitea": { "contributors": [] },
-      "bitbucket": { "contributors": [] }
+      "github": {
+        "contributors": []
+      },
+      "gitlab": {
+        "contributors": []
+      },
+      "gitea": {
+        "contributors": []
+      },
+      "bitbucket": {
+        "contributors": []
+      },
+      "azure_devops": {
+        "contributors": []
+      }
     },
     "repository": "/path/to/repository",
+    "commit_range": null,
+    "submodule_commits": {},
     "extra": null,
-    "github": { "contributors": [] },
-    "gitlab": { "contributors": [] },
-    "gitea": { "contributors": [] },
-    "bitbucket": { "contributors": [] }
+    "github": {
+      "contributors": []
+    },
+    "gitlab": {
+      "contributors": []
+    },
+    "gitea": {
+      "contributors": []
+    },
+    "bitbucket": {
+      "contributors": []
+    },
+    "azure_devops": {
+      "contributors": []
+    }
   }
 ]

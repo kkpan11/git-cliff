@@ -13,11 +13,11 @@ jobs:
       release_body: ${{ steps.git-cliff.outputs.content }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
       - name: Generate a changelog
-        uses: orhun/git-cliff-action@main
+        uses: orhun/git-cliff-action@07dda386992489f0a6151dee53f3a137713644de # main
         id: git-cliff
         with:
           config: cliff.toml
@@ -81,7 +81,7 @@ jobs:
             }
           - {
               NAME: win32-x64-mingw,
-              OS: windows-2022,
+              OS: windows-2025,
               TOOLCHAIN: stable,
               TARGET: x86_64-pc-windows-gnu,
               NPM_PUBLISH: false,
@@ -89,7 +89,7 @@ jobs:
             }
           - {
               NAME: win32-x64-msvc,
-              OS: windows-2022,
+              OS: windows-2025,
               TOOLCHAIN: stable,
               TARGET: x86_64-pc-windows-msvc,
               NPM_PUBLISH: true,
@@ -97,7 +97,7 @@ jobs:
             }
           - {
               NAME: win32-x86-msvc,
-              OS: windows-2022,
+              OS: windows-2025,
               TOOLCHAIN: stable,
               TARGET: i686-pc-windows-msvc,
               NPM_PUBLISH: false,
@@ -105,7 +105,7 @@ jobs:
             }
           - {
               NAME: win32-arm64-msvc,
-              OS: windows-2022,
+              OS: windows-2025,
               TOOLCHAIN: stable,
               TARGET: aarch64-pc-windows-msvc,
               NPM_PUBLISH: true,
@@ -113,7 +113,7 @@ jobs:
             }
           - {
               NAME: darwin-x64,
-              OS: macos-14,
+              OS: macos-15,
               TOOLCHAIN: stable,
               TARGET: x86_64-apple-darwin,
               NPM_PUBLISH: true,
@@ -121,7 +121,7 @@ jobs:
             }
           - {
               NAME: darwin-arm64,
-              OS: macos-14,
+              OS: macos-15,
               TOOLCHAIN: stable,
               TARGET: aarch64-apple-darwin,
               NPM_PUBLISH: true,
@@ -129,7 +129,7 @@ jobs:
             }
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set the release version
         shell: bash
         run: echo "RELEASE_VERSION=${GITHUB_REF:11}" >> $GITHUB_ENV
@@ -142,21 +142,21 @@ jobs:
               --allow-unauthenticated musl-tools
           fi
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
         with:
           toolchain: ${{ matrix.build.TOOLCHAIN }}
           target: ${{ matrix.build.TARGET }}
           override: true
       - name: Build (linux/macos)
-        if: matrix.build.OS != 'windows-2022'
-        uses: actions-rs/cargo@v1
+        if: matrix.build.OS != 'windows-2025'
+        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
         with:
           use-cross: true
           command: build
           args: --release --locked --target ${{ matrix.build.TARGET }}
       - name: Build (windows)
-        if: matrix.build.OS == 'windows-2022'
-        uses: actions-rs/cargo@v1
+        if: matrix.build.OS == 'windows-2025'
+        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
         with:
           command: build
           args: --release --locked --target ${{ matrix.build.TARGET }} # --no-default-features
@@ -168,7 +168,7 @@ jobs:
           OUT_DIR=release/completions/ cargo run --release --bin git-cliff-completions
           OUT_DIR=release/man/ cargo run --release --bin git-cliff-mangen
           for bin in 'git-cliff' 'git-cliff-completions' 'git-cliff-mangen'; do
-            if [ "${{ matrix.build.OS }}" = "windows-2022" ]; then
+            if [ "${{ matrix.build.OS }}" = "windows-2025" ]; then
               bin="${bin}.exe"
             fi
             cp "target/${{ matrix.build.TARGET }}/release/${bin}" release/
@@ -177,7 +177,7 @@ jobs:
       - name: Create release artifacts
         shell: bash
         run: |
-          if [ "${{ matrix.build.OS }}" = "windows-2022" ]; then
+          if [ "${{ matrix.build.OS }}" = "windows-2025" ]; then
             7z a -tzip "git-cliff-${{ env.RELEASE_VERSION }}-${{ matrix.build.TARGET }}.zip" \
               git-cliff-${{ env.RELEASE_VERSION }}/
           else
@@ -187,7 +187,7 @@ jobs:
               > git-cliff-${{ env.RELEASE_VERSION }}-${{ matrix.build.TARGET }}.tar.gz.sha512
           fi
       - name: Sign the release
-        if: matrix.build.OS == 'ubuntu-22.04' || matrix.build.OS == 'macos-14'
+        if: matrix.build.OS == 'ubuntu-22.04' || matrix.build.OS == 'macos-15'
         run: |
           echo "${{ secrets.GPG_RELEASE_KEY }}" | base64 --decode > private.key
           echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --pinentry-mode=loopback \
@@ -197,7 +197,7 @@ jobs:
             git-cliff-${{ env.RELEASE_VERSION }}-${{ matrix.build.TARGET }}.tar.gz
       - name: Publish to GitHub
         if: ${{ !contains(github.ref, '-') }}
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: git-cliff-${{ env.RELEASE_VERSION }}-${{ matrix.build.TARGET }}*
@@ -208,7 +208,7 @@ jobs:
           body: "${{ needs.generate-changelog.outputs.release_body }}"
       - name: Publish to GitHub (pre-release)
         if: ${{ contains(github.ref, '-') }}
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: git-cliff-${{ env.RELEASE_VERSION }}-${{ matrix.build.TARGET }}*
@@ -219,7 +219,7 @@ jobs:
           prerelease: true
       - name: Install node
         if: matrix.build.NPM_PUBLISH == true
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 18
           registry-url: "https://registry.npmjs.org"
@@ -234,14 +234,14 @@ jobs:
           node_arch=$(echo "${{ matrix.build.NAME }}" | cut -d '-' -f2)
           export node_arch
           export version="${{ env.RELEASE_VERSION }}"
-          if [ "${{ matrix.build.OS }}" = "windows-2022" ]; then
+          if [ "${{ matrix.build.OS }}" = "windows-2025" ]; then
             export node_pkg="${bin}-windows-${node_arch}"
           else
             export node_pkg="${bin}-${node_os}-${node_arch}"
           fi
           mkdir -p "${node_pkg}/bin"
           envsubst < package.json.tmpl > "${node_pkg}/package.json"
-          if [ "${{ matrix.build.OS }}" = "windows-2022" ]; then
+          if [ "${{ matrix.build.OS }}" = "windows-2025" ]; then
             bin="${bin}.exe"
           fi
           cp "../target/${{ matrix.build.TARGET }}/release/${bin}" "${node_pkg}/bin"
@@ -250,9 +250,13 @@ jobs:
           npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Prepare for the PyPI release
+        if: matrix.build.PYPI_PUBLISH == true
+        shell: bash
+        run: bash .github/scripts/prepare-package-assets.sh
       - name: Build Python wheels (linux)
         if: matrix.build.PYPI_PUBLISH == true && startsWith(matrix.build.NAME, 'linux')
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
           working-directory: pypi
           target: ${{ matrix.build.TARGET }}
@@ -264,15 +268,15 @@ jobs:
         if: |
           matrix.build.PYPI_PUBLISH == true &&
           (startsWith(matrix.build.OS, 'macos') || startsWith(matrix.build.OS, 'windows'))
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
           working-directory: pypi
           target: ${{ matrix.build.TARGET }}
           args: --release --sdist --out wheels
           sccache: "true"
       - name: Build Python wheels (musl)
-        if: matrix.build.PYPI_PUBLISH == true && endsWith(matrix.build.OS, 'musl')
-        uses: PyO3/maturin-action@v1
+        if: matrix.build.PYPI_PUBLISH == true && endsWith(matrix.build.NAME, 'musl')
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
           working-directory: pypi
           target: ${{ matrix.build.TARGET }}
@@ -280,7 +284,7 @@ jobs:
           sccache: "true"
           manylinux: musllinux_1_2
       - name: Upload Python wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: "wheels-${{ matrix.build.TARGET }}"
           working-directory: pypi
@@ -292,9 +296,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 18
           registry-url: "https://registry.npmjs.org"
@@ -317,18 +321,54 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           YARN_ENABLE_IMMUTABLE_INSTALLS: false
 
+  update-yarn-lock:
+    name: Update yarn.lock after the NPM release
+    needs: publish-npm
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Install node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 18
+          registry-url: "https://registry.npmjs.org"
+      - name: Update the lockfile
+        shell: bash
+        working-directory: npm/git-cliff
+        run: yarn install --mode=update-lockfile
+        env:
+          YARN_ENABLE_IMMUTABLE_INSTALLS: false
+      - name: Create a pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          add-paths: npm/git-cliff/yarn.lock
+          branch: chore/update-yarn-lock
+          delete-branch: true
+          commit-message: "chore(npm): update yarn.lock for ${{ github.ref_name }}"
+          title: "chore(npm): update yarn.lock for ${{ github.ref_name }}"
+          body: |
+            Regenerates `npm/git-cliff/yarn.lock` after `${{ github.ref_name }}` was published to npm,
+            so that the `optionalDependencies` bumped by `release.sh` resolve again under the
+            immutable `yarn install` used in CI. See #1266.
+
   publish-pypi:
     name: Publish PyPI package
     runs-on: ubuntu-22.04
     needs: publish-binaries
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: pypi/wheels
           pattern: wheels-*
           merge-multiple: true
       - name: Publish to PyPI
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         env:
           MATURIN_PYPI_TOKEN: ${{ vars.USE_TESTPYPI == 'true' && secrets.TESTPYPI_API_TOKEN || secrets.PYPI_API_TOKEN }}
           MATURIN_REPOSITORY: ${{ vars.USE_TESTPYPI == 'true' && 'testpypi' || 'pypi' }}
@@ -342,12 +382,12 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set the release version
         shell: bash
         run: echo "RELEASE_VERSION=${GITHUB_REF:11}" >> $GITHUB_ENV
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4305c38b25d97ef35a8ad1f985ccf2d2242004f2 # stable
         with:
           targets: x86_64-unknown-linux-gnu
       - name: Install cargo-deb
@@ -372,7 +412,7 @@ jobs:
             git-cliff-${{ env.RELEASE_VERSION }}.deb
       - name: Upload the release
         if: ${{ !contains(github.ref, '-') }}
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: git-cliff-${{ env.RELEASE_VERSION }}.deb
@@ -381,7 +421,7 @@ jobs:
           body: "${{ needs.generate-changelog.outputs.release_body }}"
       - name: Upload the pre-release
         if: ${{ contains(github.ref, '-') }}
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: git-cliff-${{ env.RELEASE_VERSION }}.deb
@@ -395,12 +435,12 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set the release version
         shell: bash
         run: echo "RELEASE_VERSION=${GITHUB_REF:11}" >> $GITHUB_ENV
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4305c38b25d97ef35a8ad1f985ccf2d2242004f2 # stable
         with:
           targets: x86_64-unknown-linux-gnu
       - name: Install cargo-generate-rpm
@@ -423,7 +463,7 @@ jobs:
             git-cliff-${{ env.RELEASE_VERSION }}.x86_64.rpm
       - name: Upload the release
         if: ${{ !contains(github.ref, '-') }}
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: git-cliff-${{ env.RELEASE_VERSION }}.x86_64.rpm
@@ -432,7 +472,7 @@ jobs:
           body: "${{ needs.generate-changelog.outputs.release_body }}"
       - name: Upload the pre-release
         if: ${{ contains(github.ref, '-') }}
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: git-cliff-${{ env.RELEASE_VERSION }}.x86_64.rpm
@@ -445,21 +485,15 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set the release version
         run: echo "RELEASE_VERSION=${GITHUB_REF:11}" >> $GITHUB_ENV
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4305c38b25d97ef35a8ad1f985ccf2d2242004f2 # stable
         with:
           targets: x86_64-unknown-linux-gnu
       - name: Prepare for the crates.io release
-        run: |
-          mkdir git-cliff-core/config/
-          cp config/cliff.toml git-cliff-core/config/
-          sed -i 's|"../config/"|"config/"|' git-cliff-core/src/embed.rs
-          mkdir git-cliff-core/examples/
-          cp -r examples git-cliff-core
-          sed -i 's|"../examples/"|"examples/"|' git-cliff-core/src/embed.rs
+        run: bash .github/scripts/prepare-package-assets.sh
       - name: Publish the library
         run: |
           cargo publish --allow-dirty --manifest-path git-cliff-core/Cargo.toml \
@@ -482,7 +516,7 @@ jobs:
       contents: read
     steps:
       - name: Bump formula
-        uses: mislav/bump-homebrew-formula-action@v3
+        uses: mislav/bump-homebrew-formula-action@ccf2332299a883f6af50a1d2d41e5df7904dd769 # v4.1
         with:
           formula-name: git-cliff
           formula-path: Formula/g/git-cliff.rb

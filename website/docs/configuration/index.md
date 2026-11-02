@@ -1,17 +1,46 @@
 ---
 sidebar_position: 4
 ---
+
 # Configuration
 
 **git-cliff** configuration file supports [TOML](https://github.com/toml-lang/toml) (preferred) and [YAML](https://yaml.org) formats.
 
-The configuration file is read from `$HOME/git-cliff/cliff.toml` if the file exists. This location depends on the platform, for example:
+## File Path
 
-- on Linux: `/home/<user>/.config/git-cliff/cliff.toml`
-- on Windows: `C:\Users\<user>\AppData\Roaming\git-cliff\cliff.toml`
-- on macOS: `/Users/<user>/Library/Application Support/git-cliff/cliff.toml`
+When the `--config` option is **not** given, **git-cliff** automatically discovers the configuration file, first in the project directory and then in the global user directory. If no configuration file is found, **git-cliff** will use the default configuration values. See [cliff.toml](https://github.com/orhun/git-cliff/blob/main/config/cliff.toml) for the default configuration values.
 
-See [cliff.toml](https://github.com/orhun/git-cliff/blob/main/config/cliff.toml) for the default configuration values.
+Discovery starts from the directory given by `--workdir` when that option is used, and from the current directory otherwise.
+
+:::tip
+
+The configuration schema is published on [SchemaStore](https://www.schemastore.org/git-cliff.json).
+
+:::
+
+It looks for the following project configuration files in this order:
+
+- `cliff.toml`
+- `.cliff.toml`
+- `.config/cliff.toml`
+
+If no configuration file is found in the current directory, it will search the parent directories.
+
+### Global Configuration
+
+The global configuration file is located at:
+
+```text
+<CONFIG_DIR>/git-cliff/cliff.toml
+```
+
+`<CONFIG_DIR>` is the `config_dir()` returned by [`etcetera`](https://github.com/lunacookies/etcetera)'s default base strategy and depends on the platform:
+
+- Linux: `$XDG_CONFIG_HOME`, or `~/.config`
+- macOS: `$XDG_CONFIG_HOME`, or `~/.config`
+- Windows: `%APPDATA%` (typically `~\AppData\Roaming`)
+
+On macOS, the legacy `~/Library/Application Support/git-cliff/cliff.toml` path is also supported for backwards compatibility.
 
 ## Environment Configuration Overrides
 
@@ -23,7 +52,7 @@ Format:
 [PREFIX]__[CONFIG SECTION]__[FIELD NAME]
 ```
 
-#### Examples
+### Examples
 
 To override the `footer` element:
 
